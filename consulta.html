@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Consulta de Imobilizados - Videplast</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        header {
+            background-color: #0056b3;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        #input-codigo {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        #consultar-btn {
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            position: relative;
+        }
+        #consultar-btn:hover {
+            background-color: #003d82;
+        }
+        #consultar-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #qr-reader-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        #qr-reader {
+            width: 80%;
+            max-width: 500px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        #close-qr-reader {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #d9534f;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #resultado {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: none;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            width: 30%;
+        }
+        .not-found {
+            color: #d9534f;
+            text-align: center;
+            padding: 20px;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #0056b3;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #inventario-container {
+            margin-top: 30px;
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        #inventario-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .inventario-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .inventario-item:last-child {
+            border-bottom: none;
+        }
+        .qr-icon {
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Consulta de Imobilizados</h1>
+        <p>Videplast Rio Verde</p>
+    </header>
+    
+    <div id="input-container">
+        <input type="text" id="input-codigo" placeholder="Digite o código do imobilizado (ex: 10000002)">
+        <button id="consultar-btn">
+            <span>🔍 Consultar</span>
+            <span class="qr-icon">📷</span>
+        </button>
+    </div>
+    
+    <div id="resultado">
+        <h2>Informações do Imobilizado</h2>
+        <div id="detalhes"></div>
+    </div>
+    
+    <div id="inventario-container">
+        <h2>Inventário</h2>
+        <p>Itens consultados nesta sessão:</p>
+        <div id="inventario-list"></div>
+        <button id="exportar-btn" style="margin-top: 10px;">
+            <span>📥</span> Exportar Relatório
+        </button>
+        <button id="limpar-btn" style="margin-top: 10px; margin-left: 10px; background-color: #d9534f;">
+            <span>🗑️</span> Limpar Inventário
+        </button>
+    </div>
+    
+    <div id="qr-reader-container">
+        <div id="qr-reader"></div>
+        <button id="close-qr-reader">Fechar Leitor QR</button>
+    </div>
+    
+    <footer>
+        Sistema de Consulta de Imobilizados | Desenvolvido para Videplast
+    </footer>
+
+    <script>
+        let dadosImobilizados = {};
+        let inventario = [];
+        let html5QrCode = null;
+        let scannerAtivo = false;
+        
+        async function carregarDados() {
+            try {
+                document.getElementById('consultar-btn').disabled = true;
+                mostrarLoading('Carregando dados...');
+                
+                const response = await fetch('dados_imobilizados.json');
+                if (!response.ok) throw new Error(`Erro ao carregar dados: ${response.status}`);
+                
+                dadosImobilizados = await response.json();
+                document.getElementById('consultar-btn').disabled = false;
+                document.getElementById('resultado').style.display = 'none';
+                carregarInventarioSalvo();
+            } catch (error) {
+                console.error("Erro:", error);
+                mostrarErro(`Erro ao carregar os dados: ${error.message}`);
+                document.getElementById('consultar-btn').disabled = true;
+            }
+        }
+
+        function iniciarScannerQR() {
+            const qrReaderContainer = document.getElementById('qr-reader-container');
+            qrReaderContainer.style.display = 'flex';
+            
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("qr-reader");
+            }
+            
+            if (!scannerAtivo) {
+                html5QrCode.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: 250 },
+                    (codigo) => {
+                        const codigoLimpo = codigo.trim();
+                        document.getElementById("input-codigo").value = codigoLimpo;
+                        fecharScannerQR();
+                        consultar();
+                    },
+                    (erro) => {
+                        if (erro && !erro.message.includes('No QR code found')) {
+                            console.log("Erro no scanner:", erro);
+                        }
+                    }
+                ).then(() => {
+                    scannerAtivo = true;
+                }).catch(err => {
+                    console.error("Erro ao iniciar scanner:", err);
+                    fecharScannerQR();
+                    mostrarErro("Não foi possível acessar a câmera. Verifique as permissões.");
+                });
+            }
+        }
+
+        function fecharScannerQR() {
+            const qrReaderContainer = document.getElementById('qr-reader-container');
+            qrReaderContainer.style.display = 'none';
+            
+            if (html5QrCode && scannerAtivo) {
+                html5QrCode.stop().then(() => {
+                    scannerAtivo = false;
+                }).catch(err => {
+                    console.error("Erro ao parar scanner:", err);
+                });
+            }
+        }
+
+        function consultar() {
+            const codigo = document.getElementById("input-codigo").value.trim();
+            if (!codigo) {
+                mostrarErro('Por favor, digite um código ou escaneie um QR Code');
+                return;
+            }
+
+            mostrarLoading('Buscando informações...');
+            setTimeout(() => {
+                if (dadosImobilizados[codigo]) {
+                    const item = dadosImobilizados[codigo];
+                    mostrarResultado(codigo, item);
+                    adicionarAoInventario(codigo, item);
+                } else {
+                    mostrarErro(`Imobilizado ${codigo} não encontrado`);
+                }
+            }, 300);
+        }
+
+        function mostrarLoading(mensagem) {
+            document.getElementById('detalhes').innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>${mensagem}</p>
+                </div>`;
+            document.getElementById('resultado').style.display = 'block';
+        }
+
+        function mostrarErro(mensagem) {
+            document.getElementById('detalhes').innerHTML = `<p class="not-found">${mensagem}</p>`;
+            document.getElementById('resultado').style.display = 'block';
+        }
+
+        function mostrarResultado(codigo, item) {
+            let html = `
+                <table>
+                    <tr><th>Código</th><td>${codigo}</td></tr>
+                    <tr><th>Descrição</th><td>${item.Descrição || 'N/A'}</td></tr>
+                    <tr><th>Data</th><td>${item.Data || 'N/A'}</td></tr>
+                    <tr><th>Inventário</th><td>${item.Inventário || 'N/A'}</td></tr>
+                    <tr><th>Série</th><td>${item.Série || 'N/A'}</td></tr>
+                    <tr><th>Centro de Custo</th><td>${item['Centro Custo'] || 'N/A'}</td></tr>
+                    <tr><th>Subnúmero</th><td>${item['Subnº'] || 'N/A'}</td></tr>
+                </table>`;
+
+            if (item.Link) {
+                html += `<div style="margin-top:20px;"><a href="${item.Link}" target="_blank" style="color: #0056b3;">Ver detalhes completos</a></div>`;
+            }
+
+            document.getElementById('detalhes').innerHTML = html;
+            document.getElementById('resultado').style.display = 'block';
+        }
+
+        function adicionarAoInventario(codigo, item) {
+            if (!inventario.find(i => i.codigo === codigo)) {
+                inventario.push({ codigo, ...item });
+                salvarInventario();
+                renderizarInventario();
+            }
+        }
+
+        function carregarInventarioSalvo() {
+            const salvo = localStorage.getItem("inventario");
+            if (salvo) {
+                try {
+                    inventario = JSON.parse(salvo);
+                    renderizarInventario();
+                } catch (e) {
+                    console.error("Erro ao carregar inventário salvo:", e);
+                    inventario = [];
+                }
+            }
+        }
+
+        function salvarInventario() {
+            localStorage.setItem("inventario", JSON.stringify(inventario));
+        }
+
+        function renderizarInventario() {
+            const container = document.getElementById("inventario-list");
+            container.innerHTML = "";
+
+            if (inventario.length === 0) {
+                container.innerHTML = "<p style='color:#888;'>Nenhum item consultado ainda.</p>";
+                return;
+            }
+
+            inventario.forEach(item => {
+                const div = document.createElement("div");
+                div.classList.add("inventario-item");
+                div.textContent = `${item.codigo} - ${item.Descrição || 'Sem descrição'}`;
+                container.appendChild(div);
+            });
+        }
+
+        function limparInventario() {
+            inventario = [];
+            salvarInventario();
+            renderizarInventario();
+        }
+
+        function exportarRelatorio() {
+            if (inventario.length === 0) {
+                alert("Nenhum item no inventário para exportar.");
+                return;
+            }
+
+            const linhas = inventario.map(item =>
+                `"${item.codigo}","${item.Descrição || ''}","${item.Data || ''}","${item['Centro Custo'] || ''}"`
+            );
+
+            const csvContent = [
+                '"Código","Descrição","Data","Centro de Custo"',
+                ...linhas
+            ].join("\n");
+
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", "relatorio_inventario.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        document.getElementById("consultar-btn").addEventListener("click", function(e) {
+            if (e.target.classList.contains('qr-icon') || e.target.parentElement.classList.contains('qr-icon')) {
+                iniciarScannerQR();
+            } else {
+                consultar();
+            }
+        });
+
+        document.getElementById("input-codigo").addEventListener("keypress", function(e) {
+            if (e.key === "Enter") consultar();
+        });
+
+        document.getElementById("close-qr-reader").addEventListener("click", fecharScannerQR);
+        document.getElementById("limpar-btn").addEventListener("click", limparInventario);
+        document.getElementById("exportar-btn").addEventListener("click", exportarRelatorio);
+
+        document.addEventListener("DOMContentLoaded", carregarDados);
+    </script>
+</body>
+</html>
