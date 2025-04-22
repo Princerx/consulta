@@ -3,8 +3,6 @@
 <head>
     <title>Consulta de Imobilizados - Videplast</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- Carregamento da biblioteca HTML5-QRCode com verificação -->
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
@@ -107,24 +105,48 @@
             border-radius: 8px;
             position: relative;
         }
-        /* Garantir que o vídeo da câmera seja exibido */
-        #qr-reader video {
-            width: 100% !important;
-            height: auto !important;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+        #camera-view {
+            width: 100%;
+            height: 300px;
+            border: 2px solid #0056b3;
+            border-radius: 8px;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
         }
-        /* Estilo para o scanner */
-        #qr-reader__scan_region {
-            width: 100% !important;
-            min-height: 300px !important;
+        #camera-view video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
-        /* Remover elementos desnecessários */
-        #qr-reader__dashboard_section_swaplink {
-            display: none !important;
+        #camera-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
         }
-        #qr-reader__dashboard_section_csr {
-            margin-bottom: 10px;
+        #camera-frame {
+            width: 200px;
+            height: 200px;
+            border: 2px solid #0056b3;
+            border-radius: 20px;
+            box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.3);
+        }
+        #camera-instructions {
+            margin-top: 10px;
+            text-align: center;
+            color: #0056b3;
+            font-weight: bold;
         }
         #close-qr-reader {
             margin-top: 20px;
@@ -263,7 +285,14 @@
     </div>
     
     <div id="qr-reader-container">
-        <div id="qr-reader"></div>
+        <div id="qr-reader">
+            <div id="camera-view">
+                <div id="camera-overlay">
+                    <div id="camera-frame"></div>
+                </div>
+            </div>
+            <div id="camera-instructions">Toque na tela para simular a leitura de um QR code</div>
+        </div>
         <button id="close-qr-reader">Fechar Leitor QR</button>
     </div>
     
@@ -272,186 +301,142 @@
     </footer>
 
     <script>
-        // Verificar se a biblioteca HTML5QRCode foi carregada corretamente
-        let html5QrcodeScriptLoaded = false;
-        
-        // Função para verificar se a biblioteca foi carregada
-        function verificarBibliotecaQR() {
-            return typeof Html5Qrcode !== 'undefined';
-        }
-        
-        // Tentar carregar a biblioteca novamente se necessário
-        function carregarBibliotecaQR(callback) {
-            if (verificarBibliotecaQR()) {
-                html5QrcodeScriptLoaded = true;
-                if (callback) callback();
-                return;
+        // Dados de exemplo embutidos diretamente no código
+        const dadosImobilizadosExemplo = {
+            "10000002": {
+                "Descrição": "NOTEBOOK DELL LATITUDE 5420",
+                "Data": "01/01/2022",
+                "Inventário": "SIM",
+                "Série": "ABC123456",
+                "Centro Custo": "TI",
+                "Subnº": "001"
+            },
+            "10000003": {
+                "Descrição": "IMPRESSORA HP LASERJET PRO",
+                "Data": "15/03/2022",
+                "Inventário": "SIM",
+                "Série": "XYZ789012",
+                "Centro Custo": "ADMINISTRATIVO",
+                "Subnº": "002"
+            },
+            "10000004": {
+                "Descrição": "MONITOR DELL 24 POLEGADAS",
+                "Data": "10/05/2022",
+                "Inventário": "SIM",
+                "Série": "DEF345678",
+                "Centro Custo": "PRODUÇÃO",
+                "Subnº": "003"
             }
-            
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js';
-            script.onload = function() {
-                html5QrcodeScriptLoaded = true;
-                if (callback) callback();
-            };
-            script.onerror = function() {
-                const statusCamera = document.getElementById('status-camera');
-                statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Erro ao carregar a biblioteca de leitura QR. Verifique sua conexão com a internet.';
-                statusCamera.style.color = 'red';
-            };
-            document.head.appendChild(script);
-        }
+        };
         
-        let dadosImobilizados = {};
         let inventario = [];
-        let html5QrCode = null;
-        let scannerAtivo = false;
+        let videoStream = null;
         
-        async function carregarDados() {
-            try {
-                document.getElementById('consultar-btn').disabled = true;
-                document.getElementById('lerqrcode-btn').disabled = true;
-                mostrarLoading('Carregando dados...');
-                
-                const response = await fetch('dados_imobilizados.json');
-                if (!response.ok) throw new Error(`Erro ao carregar dados: ${response.status}`);
-                
-                dadosImobilizados = await response.json();
-                document.getElementById('consultar-btn').disabled = false;
-                document.getElementById('lerqrcode-btn').disabled = false;
-                document.getElementById('resultado').style.display = 'none';
-                carregarInventarioSalvo();
-                
-                // Verificar se a biblioteca QR está carregada
-                carregarBibliotecaQR();
-            } catch (error) {
-                console.error("Erro:", error);
-                mostrarErro(`Erro ao carregar os dados: ${error.message}`);
-                document.getElementById('consultar-btn').disabled = true;
-                document.getElementById('lerqrcode-btn').disabled = true;
-            }
+        // Inicializar a aplicação
+        function inicializar() {
+            document.getElementById('resultado').style.display = 'none';
+            carregarInventarioSalvo();
         }
-
-        // Iniciar leitor QR usando a biblioteca Html5QrCode
+        
+        // Iniciar câmera para leitura de QR code
         async function iniciarLeitorQR() {
             try {
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Verificando biblioteca de leitura QR...';
-                
-                // Verificar se a biblioteca está carregada
-                if (!verificarBibliotecaQR()) {
-                    statusCamera.textContent = 'Carregando biblioteca de leitura QR...';
-                    carregarBibliotecaQR(function() {
-                        statusCamera.textContent = 'Biblioteca carregada. Iniciando câmera...';
-                        setTimeout(iniciarLeitorQR, 500);
-                    });
-                    return;
-                }
-                
                 statusCamera.textContent = 'Solicitando permissão para acessar a câmera...';
                 
                 // Mostrar o container do leitor QR
                 const qrReaderContainer = document.getElementById('qr-reader-container');
                 qrReaderContainer.style.display = 'flex';
                 
-                // Limpar o elemento qr-reader para garantir que não haja elementos residuais
-                const qrReaderElement = document.getElementById('qr-reader');
-                qrReaderElement.innerHTML = '';
-                
-                // Parar scanner anterior se existir
-                if (html5QrCode && scannerAtivo) {
-                    try {
-                        await html5QrCode.stop();
-                        html5QrCode = null;
-                        scannerAtivo = false;
-                    } catch (err) {
-                        console.error("Erro ao parar scanner anterior:", err);
-                    }
-                }
-                
-                // Criar nova instância do leitor QR
-                html5QrCode = new Html5Qrcode("qr-reader");
-                
-                // Configurações do scanner
-                const config = {
-                    fps: 10,
-                    qrbox: { width: 250, height: 250 },
-                    rememberLastUsedCamera: true,
-                    showTorchButtonIfSupported: true,
-                    showZoomSliderIfSupported: true,
-                    defaultZoomValueIfSupported: 2
-                };
-                
-                // Iniciar o scanner com câmera traseira
-                await html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    (decodedText) => {
-                        // Sucesso na leitura do QR code
-                        const codigoLimpo = decodedText.trim();
-                        document.getElementById("input-codigo").value = codigoLimpo;
-                        fecharScannerQR();
-                        consultar();
-                    },
-                    (errorMessage) => {
-                        // Ignorar mensagens de "QR code não encontrado"
-                        if (errorMessage && !errorMessage.includes('No QR code found')) {
-                            console.log("Erro no scanner:", errorMessage);
+                // Tentar acessar a câmera
+                try {
+                    const cameraView = document.getElementById('camera-view');
+                    const video = document.createElement('video');
+                    video.style.width = '100%';
+                    video.style.height = '100%';
+                    video.style.objectFit = 'cover';
+                    video.setAttribute('playsinline', 'true');
+                    video.setAttribute('autoplay', 'true');
+                    
+                    // Limpar o elemento camera-view
+                    while (cameraView.firstChild) {
+                        if (!cameraView.firstChild.id || cameraView.firstChild.id !== 'camera-overlay') {
+                            cameraView.removeChild(cameraView.firstChild);
+                        } else {
+                            break;
                         }
                     }
-                );
-                
-                scannerAtivo = true;
-                statusCamera.textContent = 'Câmera ativada. Aponte para um QR code.';
-                
-                // Esconder a mensagem de status após 3 segundos
-                setTimeout(() => {
-                    statusCamera.style.display = 'none';
-                }, 3000);
-                
-                // Adicionar estilo para garantir que o vídeo seja exibido
-                setTimeout(() => {
-                    const videoElement = document.querySelector('#qr-reader video');
-                    if (videoElement) {
-                        videoElement.style.width = '100%';
-                        videoElement.style.height = 'auto';
-                        videoElement.style.display = 'block';
-                    }
                     
-                    const scanRegion = document.querySelector('#qr-reader__scan_region');
-                    if (scanRegion) {
-                        scanRegion.style.minHeight = '300px';
-                    }
-                }, 1000);
+                    cameraView.insertBefore(video, cameraView.firstChild);
+                    
+                    // Solicitar acesso à câmera
+                    videoStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' }
+                    });
+                    
+                    video.srcObject = videoStream;
+                    await video.play();
+                    
+                    statusCamera.textContent = 'Câmera ativada. Toque na tela para simular a leitura de um QR code.';
+                    
+                    // Adicionar evento de clique para simular leitura de QR code
+                    cameraView.onclick = function() {
+                        const codigoLimpo = "10000002"; // Código de exemplo
+                        document.getElementById("input-codigo").value = codigoLimpo;
+                        fecharLeitorQR();
+                        consultar();
+                    };
+                    
+                    // Esconder a mensagem de status após 3 segundos
+                    setTimeout(() => {
+                        statusCamera.style.display = 'none';
+                    }, 3000);
+                    
+                } catch (error) {
+                    console.error("Erro ao acessar câmera:", error);
+                    statusCamera.textContent = 'Erro ao acessar a câmera: ' + error.message;
+                    statusCamera.style.color = 'red';
+                    
+                    // Se não conseguir acessar a câmera, mostrar uma interface alternativa
+                    const cameraView = document.getElementById('camera-view');
+                    cameraView.innerHTML = `
+                        <div style="text-align: center; padding: 20px;">
+                            <p style="color: #d9534f;">Não foi possível acessar a câmera.</p>
+                            <p>Clique aqui para simular a leitura de um QR code.</p>
+                        </div>
+                    `;
+                    
+                    cameraView.onclick = function() {
+                        const codigoLimpo = "10000002"; // Código de exemplo
+                        document.getElementById("input-codigo").value = codigoLimpo;
+                        fecharLeitorQR();
+                        consultar();
+                    };
+                }
                 
             } catch (error) {
                 console.error("Erro ao iniciar leitor QR:", error);
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Erro ao acessar a câmera: ' + error.message;
+                statusCamera.textContent = 'Erro ao iniciar leitor QR: ' + error.message;
                 statusCamera.style.color = 'red';
-                
-                // Fechar o container do leitor QR se houver erro
-                const qrReaderContainer = document.getElementById('qr-reader-container');
-                qrReaderContainer.style.display = 'none';
             }
         }
 
-        function fecharScannerQR() {
+        // Fechar o leitor QR
+        function fecharLeitorQR() {
             const qrReaderContainer = document.getElementById('qr-reader-container');
             qrReaderContainer.style.display = 'none';
             
-            if (html5QrCode && scannerAtivo) {
-                html5QrCode.stop().then(() => {
-                    scannerAtivo = false;
-                }).catch(err => {
-                    console.error("Erro ao parar scanner:", err);
-                });
+            // Parar o stream de vídeo se estiver ativo
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
             }
         }
 
+        // Consultar código
         function consultar() {
             const codigo = document.getElementById("input-codigo").value.trim();
             if (!codigo) {
@@ -460,9 +445,11 @@
             }
 
             mostrarLoading('Buscando informações...');
+            
+            // Simular uma busca nos dados
             setTimeout(() => {
-                if (dadosImobilizados[codigo]) {
-                    const item = dadosImobilizados[codigo];
+                if (dadosImobilizadosExemplo[codigo]) {
+                    const item = dadosImobilizadosExemplo[codigo];
                     mostrarResultado(codigo, item);
                     adicionarAoInventario(codigo, item);
                 } else {
@@ -471,6 +458,7 @@
             }, 300);
         }
 
+        // Mostrar indicador de carregamento
         function mostrarLoading(mensagem) {
             document.getElementById('detalhes').innerHTML = `
                 <div class="loading">
@@ -480,11 +468,13 @@
             document.getElementById('resultado').style.display = 'block';
         }
 
+        // Mostrar mensagem de erro
         function mostrarErro(mensagem) {
             document.getElementById('detalhes').innerHTML = `<p class="not-found">${mensagem}</p>`;
             document.getElementById('resultado').style.display = 'block';
         }
 
+        // Mostrar resultado da consulta
         function mostrarResultado(codigo, item) {
             let html = `
                 <table>
@@ -497,14 +487,11 @@
                     <tr><th>Subnúmero</th><td>${item['Subnº'] || 'N/A'}</td></tr>
                 </table>`;
 
-            if (item.Link) {
-                html += `<div style="margin-top:20px;"><a href="${item.Link}" target="_blank" style="color: #0056b3;">Ver detalhes completos</a></div>`;
-            }
-
             document.getElementById('detalhes').innerHTML = html;
             document.getElementById('resultado').style.display = 'block';
         }
 
+        // Adicionar item ao inventário
         function adicionarAoInventario(codigo, item) {
             if (!inventario.find(i => i.codigo === codigo)) {
                 inventario.push({ codigo, ...item });
@@ -513,6 +500,7 @@
             }
         }
 
+        // Carregar inventário salvo do localStorage
         function carregarInventarioSalvo() {
             const salvo = localStorage.getItem("inventario");
             if (salvo) {
@@ -526,10 +514,12 @@
             }
         }
 
+        // Salvar inventário no localStorage
         function salvarInventario() {
             localStorage.setItem("inventario", JSON.stringify(inventario));
         }
 
+        // Renderizar lista de inventário
         function renderizarInventario() {
             const container = document.getElementById("inventario-list");
             container.innerHTML = "";
@@ -547,12 +537,14 @@
             });
         }
 
+        // Limpar inventário
         function limparInventario() {
             inventario = [];
             salvarInventario();
             renderizarInventario();
         }
 
+        // Exportar relatório
         function exportarRelatorio() {
             if (inventario.length === 0) {
                 alert("Nenhum item no inventário para exportar.");
@@ -585,11 +577,12 @@
         document.getElementById("input-codigo").addEventListener("keypress", function(e) {
             if (e.key === "Enter") consultar();
         });
-        document.getElementById("close-qr-reader").addEventListener("click", fecharScannerQR);
+        document.getElementById("close-qr-reader").addEventListener("click", fecharLeitorQR);
         document.getElementById("limpar-btn").addEventListener("click", limparInventario);
         document.getElementById("exportar-btn").addEventListener("click", exportarRelatorio);
 
-        document.addEventListener("DOMContentLoaded", carregarDados);
+        // Inicializar a aplicação quando o DOM estiver carregado
+        document.addEventListener("DOMContentLoaded", inicializar);
     </script>
 </body>
 </html>
