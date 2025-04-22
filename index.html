@@ -3,6 +3,7 @@
 <head>
     <title>Consulta de Imobilizados - Videplast</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Carregamento da biblioteca HTML5-QRCode com verificação -->
     <script src="https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js"></script>
     <style>
         body {
@@ -271,6 +272,37 @@
     </footer>
 
     <script>
+        // Verificar se a biblioteca HTML5QRCode foi carregada corretamente
+        let html5QrcodeScriptLoaded = false;
+        
+        // Função para verificar se a biblioteca foi carregada
+        function verificarBibliotecaQR() {
+            return typeof Html5Qrcode !== 'undefined';
+        }
+        
+        // Tentar carregar a biblioteca novamente se necessário
+        function carregarBibliotecaQR(callback) {
+            if (verificarBibliotecaQR()) {
+                html5QrcodeScriptLoaded = true;
+                if (callback) callback();
+                return;
+            }
+            
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/html5-qrcode@2.3.8/dist/html5-qrcode.min.js';
+            script.onload = function() {
+                html5QrcodeScriptLoaded = true;
+                if (callback) callback();
+            };
+            script.onerror = function() {
+                const statusCamera = document.getElementById('status-camera');
+                statusCamera.style.display = 'block';
+                statusCamera.textContent = 'Erro ao carregar a biblioteca de leitura QR. Verifique sua conexão com a internet.';
+                statusCamera.style.color = 'red';
+            };
+            document.head.appendChild(script);
+        }
+        
         let dadosImobilizados = {};
         let inventario = [];
         let html5QrCode = null;
@@ -290,6 +322,9 @@
                 document.getElementById('lerqrcode-btn').disabled = false;
                 document.getElementById('resultado').style.display = 'none';
                 carregarInventarioSalvo();
+                
+                // Verificar se a biblioteca QR está carregada
+                carregarBibliotecaQR();
             } catch (error) {
                 console.error("Erro:", error);
                 mostrarErro(`Erro ao carregar os dados: ${error.message}`);
@@ -298,11 +333,23 @@
             }
         }
 
-        // Iniciar leitor QR usando a biblioteca Html5QrCode diretamente
+        // Iniciar leitor QR usando a biblioteca Html5QrCode
         async function iniciarLeitorQR() {
             try {
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
+                statusCamera.textContent = 'Verificando biblioteca de leitura QR...';
+                
+                // Verificar se a biblioteca está carregada
+                if (!verificarBibliotecaQR()) {
+                    statusCamera.textContent = 'Carregando biblioteca de leitura QR...';
+                    carregarBibliotecaQR(function() {
+                        statusCamera.textContent = 'Biblioteca carregada. Iniciando câmera...';
+                        setTimeout(iniciarLeitorQR, 500);
+                    });
+                    return;
+                }
+                
                 statusCamera.textContent = 'Solicitando permissão para acessar a câmera...';
                 
                 // Mostrar o container do leitor QR
