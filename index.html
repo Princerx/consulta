@@ -277,15 +277,19 @@
             }
         }
 
-        // Verificar permissão da câmera
-        async function verificarPermissaoCamera() {
+        // Verificar permissão da câmera e iniciar scanner
+        async function iniciarLeitorQR() {
             try {
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
                 statusCamera.textContent = 'Solicitando permissão para acessar a câmera...';
                 
                 // Solicitar permissão explicitamente
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: "environment" 
+                    } 
+                });
                 
                 // Se chegou aqui, a permissão foi concedida
                 statusCamera.textContent = 'Permissão da câmera concedida. Iniciando scanner...';
@@ -293,8 +297,52 @@
                 // Parar o stream, pois o scanner irá solicitar novamente
                 stream.getTracks().forEach(track => track.stop());
                 
-                // Iniciar o scanner após obter permissão
-                iniciarScannerQR();
+                // Mostrar o container do leitor QR
+                const qrReaderContainer = document.getElementById('qr-reader-container');
+                qrReaderContainer.style.display = 'flex';
+                
+                // Criar nova instância do leitor QR se necessário
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode("qr-reader");
+                }
+                
+                // Parar scanner anterior se estiver ativo
+                if (scannerAtivo) {
+                    try {
+                        await html5QrCode.stop();
+                        scannerAtivo = false;
+                    } catch (err) {
+                        console.error("Erro ao parar scanner anterior:", err);
+                    }
+                }
+                
+                // Configurações do scanner
+                const config = {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                    aspectRatio: 1.0,
+                    formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+                };
+                
+                // Iniciar o scanner
+                await html5QrCode.start(
+                    { facingMode: "environment" },
+                    config,
+                    (codigo) => {
+                        const codigoLimpo = codigo.trim();
+                        document.getElementById("input-codigo").value = codigoLimpo;
+                        fecharScannerQR();
+                        consultar();
+                    },
+                    (erro) => {
+                        if (erro && !erro.message.includes('No QR code found')) {
+                            console.log("Erro no scanner:", erro);
+                        }
+                    }
+                );
+                
+                scannerAtivo = true;
+                console.log("Scanner QR iniciado com sucesso");
                 
                 // Esconder a mensagem de status após 2 segundos
                 setTimeout(() => {
@@ -305,66 +353,13 @@
                 console.error("Erro ao acessar câmera:", error);
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Erro ao acessar a câmera. Verifique se você concedeu permissão.';
+                statusCamera.textContent = 'Erro ao acessar a câmera: ' + error.message;
                 statusCamera.style.color = 'red';
+                
+                // Fechar o container do leitor QR se estiver aberto
+                const qrReaderContainer = document.getElementById('qr-reader-container');
+                qrReaderContainer.style.display = 'none';
             }
-        }
-
-        function iniciarScannerQR() {
-            const qrReaderContainer = document.getElementById('qr-reader-container');
-            qrReaderContainer.style.display = 'flex';
-            
-            if (html5QrCode) {
-                // Se já existe uma instância, pare-a primeiro
-                if (scannerAtivo) {
-                    html5QrCode.stop().then(() => {
-                        scannerAtivo = false;
-                        iniciarNovoScanner();
-                    }).catch(err => {
-                        console.error("Erro ao parar scanner existente:", err);
-                        iniciarNovoScanner();
-                    });
-                } else {
-                    iniciarNovoScanner();
-                }
-            } else {
-                html5QrCode = new Html5Qrcode("qr-reader");
-                iniciarNovoScanner();
-            }
-        }
-        
-        function iniciarNovoScanner() {
-            const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0
-            };
-            
-            html5QrCode.start(
-                { facingMode: "environment" },
-                config,
-                (codigo) => {
-                    const codigoLimpo = codigo.trim();
-                    document.getElementById("input-codigo").value = codigoLimpo;
-                    fecharScannerQR();
-                    consultar();
-                },
-                (erro) => {
-                    if (erro && !erro.message.includes('No QR code found')) {
-                        console.log("Erro no scanner:", erro);
-                    }
-                }
-            ).then(() => {
-                scannerAtivo = true;
-                console.log("Scanner QR iniciado com sucesso");
-            }).catch(err => {
-                console.error("Erro ao iniciar scanner:", err);
-                fecharScannerQR();
-                const statusCamera = document.getElementById('status-camera');
-                statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Não foi possível acessar a câmera. Verifique as permissões do navegador.';
-                statusCamera.style.color = 'red';
-            });
         }
 
         function fecharScannerQR() {
@@ -509,7 +504,7 @@
 
         // Eventos para os botões
         document.getElementById("consultar-btn").addEventListener("click", consultar);
-        document.getElementById("lerqrcode-btn").addEventListener("click", verificarPermissaoCamera);
+        document.getElementById("lerqrcode-btn").addEventListener("click", iniciarLeitorQR);
         document.getElementById("input-codigo").addEventListener("keypress", function(e) {
             if (e.key === "Enter") consultar();
         });
