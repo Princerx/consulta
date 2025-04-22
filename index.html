@@ -49,7 +49,7 @@
             font-size: 16px;
             min-width: 200px;
         }
-        #consultar-btn {
+        .btn {
             background-color: #920606;
             color: white;
             border: none;
@@ -59,30 +59,18 @@
             font-size: 16px;
             transition: background-color 0.3s;
         }
-        #consultar-btn:hover {
+        .btn:hover {
             background-color: #003d82;
         }
-        #consultar-btn:disabled {
+        .btn:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
-        /* Botão separado para leitura de QR Code */
-        #lerqrcode-btn {
-            background-color: #920606;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background-color 0.3s;
+        .btn-secondary {
+            background-color: #0056b3;
         }
-        #lerqrcode-btn:hover {
-            background-color: #003d82;
-        }
-        #lerqrcode-btn:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
+        .btn-danger {
+            background-color: #d9534f;
         }
         #qr-reader-container {
             display: none;
@@ -160,19 +148,48 @@
         }
         #resultado {
             background: white;
-            padding: 20px;
+            padding: 15px;
             border-radius: 5px;
             margin-top: 20px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             display: none;
         }
+        .resultado-compacto {
+            font-size: 14px;
+        }
+        .resultado-compacto h2 {
+            font-size: 18px;
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #0056b3;
+        }
+        .resultado-compacto table {
+            font-size: 14px;
+        }
+        .resultado-compacto th {
+            padding: 8px;
+        }
+        .resultado-compacto td {
+            padding: 8px;
+        }
+        .item-adicional {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed #ddd;
+        }
+        .item-adicional h3 {
+            font-size: 16px;
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #0056b3;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
+            margin-top: 10px;
         }
         th, td {
-            padding: 12px;
+            padding: 10px;
             border: 1px solid #ddd;
             text-align: left;
         }
@@ -208,6 +225,7 @@
             padding: 20px;
             border-radius: 5px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: none;
         }
         #inventario-list {
             max-height: 200px;
@@ -230,6 +248,12 @@
             border-radius: 4px;
             display: none;
         }
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
         /* Responsividade para dispositivos móveis */
         @media (max-width: 600px) {
             #input-container {
@@ -238,10 +262,13 @@
             #input-codigo {
                 width: 100%;
             }
-            #consultar-btn, #lerqrcode-btn {
+            .btn {
                 width: 100%;
                 margin-left: 0;
                 margin-top: 5px;
+            }
+            .action-buttons {
+                flex-direction: column;
             }
         }
     </style>
@@ -261,27 +288,30 @@
     
     <div id="input-container">
         <input type="text" id="input-codigo" placeholder="Digite o código do imobilizado (ex: 10000002)">
-        <button id="consultar-btn">🔍 Consultar</button>
-        <button id="lerqrcode-btn">📷 Ler QR Code</button>
+        <button id="consultar-btn" class="btn">🔍 Consultar</button>
+        <button id="lerqrcode-btn" class="btn">📷 Ler QR Code</button>
     </div>
     
     <div id="status-camera"></div>
     
-    <div id="resultado">
+    <div id="resultado" class="resultado-compacto">
         <h2>Informações do Imobilizado</h2>
         <div id="detalhes"></div>
+    </div>
+    
+    <div class="action-buttons">
+        <button id="iniciar-inventario-btn" class="btn btn-secondary">📋 Iniciar Inventário</button>
     </div>
     
     <div id="inventario-container">
         <h2>Inventário</h2>
         <p>Itens consultados nesta sessão:</p>
         <div id="inventario-list"></div>
-        <button id="exportar-btn" style="margin-top: 10px;">
-            <span>📥</span> Exportar Relatório
-        </button>
-        <button id="limpar-btn" style="margin-top: 10px; margin-left: 10px; background-color: #d9534f;">
-            <span>🗑️</span> Limpar Inventário
-        </button>
+        <div class="action-buttons">
+            <button id="exportar-btn" class="btn">📥 Exportar Relatório</button>
+            <button id="limpar-btn" class="btn btn-danger">🗑️ Limpar Inventário</button>
+            <button id="fechar-inventario-btn" class="btn">❌ Fechar Inventário</button>
+        </div>
     </div>
     
     <div id="qr-reader-container">
@@ -293,7 +323,7 @@
             </div>
             <div id="camera-instructions">Toque na tela para simular a leitura de um QR code</div>
         </div>
-        <button id="close-qr-reader">Fechar Leitor QR</button>
+        <button id="close-qr-reader" class="btn btn-danger">Fechar Leitor QR</button>
     </div>
     
     <footer>
@@ -304,37 +334,75 @@
         // Dados de exemplo embutidos diretamente no código
         const dadosImobilizadosExemplo = {
             "10000002": {
-                "Descrição": "NOTEBOOK DELL LATITUDE 5420",
-                "Data": "01/01/2022",
-                "Inventário": "SIM",
-                "Série": "ABC123456",
-                "Centro Custo": "TI",
-                "Subnº": "001"
+                "itens": [
+                    {
+                        "Descrição": "NOTEBOOK DELL LATITUDE 5420",
+                        "Data": "01/01/2022",
+                        "Inventário": "SIM",
+                        "Série": "ABC123456",
+                        "Centro Custo": "TI",
+                        "Subnº": "001"
+                    },
+                    {
+                        "Descrição": "CARREGADOR DELL 65W",
+                        "Data": "01/01/2022",
+                        "Inventário": "SIM",
+                        "Série": "DEF789012",
+                        "Centro Custo": "TI",
+                        "Subnº": "001-A"
+                    },
+                    {
+                        "Descrição": "MOUSE SEM FIO DELL",
+                        "Data": "01/01/2022",
+                        "Inventário": "SIM",
+                        "Série": "GHI345678",
+                        "Centro Custo": "TI",
+                        "Subnº": "001-B"
+                    }
+                ]
             },
             "10000003": {
-                "Descrição": "IMPRESSORA HP LASERJET PRO",
-                "Data": "15/03/2022",
-                "Inventário": "SIM",
-                "Série": "XYZ789012",
-                "Centro Custo": "ADMINISTRATIVO",
-                "Subnº": "002"
+                "itens": [
+                    {
+                        "Descrição": "IMPRESSORA HP LASERJET PRO",
+                        "Data": "15/03/2022",
+                        "Inventário": "SIM",
+                        "Série": "XYZ789012",
+                        "Centro Custo": "ADMINISTRATIVO",
+                        "Subnº": "002"
+                    }
+                ]
             },
             "10000004": {
-                "Descrição": "MONITOR DELL 24 POLEGADAS",
-                "Data": "10/05/2022",
-                "Inventário": "SIM",
-                "Série": "DEF345678",
-                "Centro Custo": "PRODUÇÃO",
-                "Subnº": "003"
+                "itens": [
+                    {
+                        "Descrição": "MONITOR DELL 24 POLEGADAS",
+                        "Data": "10/05/2022",
+                        "Inventário": "SIM",
+                        "Série": "DEF345678",
+                        "Centro Custo": "PRODUÇÃO",
+                        "Subnº": "003"
+                    },
+                    {
+                        "Descrição": "SUPORTE PARA MONITOR",
+                        "Data": "10/05/2022",
+                        "Inventário": "SIM",
+                        "Série": "N/A",
+                        "Centro Custo": "PRODUÇÃO",
+                        "Subnº": "003-A"
+                    }
+                ]
             }
         };
         
         let inventario = [];
         let videoStream = null;
+        let inventarioAtivo = false;
         
         // Inicializar a aplicação
         function inicializar() {
             document.getElementById('resultado').style.display = 'none';
+            document.getElementById('inventario-container').style.display = 'none';
             carregarInventarioSalvo();
         }
         
@@ -449,9 +517,13 @@
             // Simular uma busca nos dados
             setTimeout(() => {
                 if (dadosImobilizadosExemplo[codigo]) {
-                    const item = dadosImobilizadosExemplo[codigo];
-                    mostrarResultado(codigo, item);
-                    adicionarAoInventario(codigo, item);
+                    const imobilizado = dadosImobilizadosExemplo[codigo];
+                    mostrarResultado(codigo, imobilizado);
+                    
+                    // Adicionar ao inventário apenas se o inventário estiver ativo
+                    if (inventarioAtivo) {
+                        adicionarAoInventario(codigo, imobilizado);
+                    }
                 } else {
                     mostrarErro(`Imobilizado ${codigo} não encontrado`);
                 }
@@ -475,26 +547,69 @@
         }
 
         // Mostrar resultado da consulta
-        function mostrarResultado(codigo, item) {
-            let html = `
-                <table>
-                    <tr><th>Código</th><td>${codigo}</td></tr>
-                    <tr><th>Descrição</th><td>${item.Descrição || 'N/A'}</td></tr>
-                    <tr><th>Data</th><td>${item.Data || 'N/A'}</td></tr>
-                    <tr><th>Inventário</th><td>${item.Inventário || 'N/A'}</td></tr>
-                    <tr><th>Série</th><td>${item.Série || 'N/A'}</td></tr>
-                    <tr><th>Centro de Custo</th><td>${item['Centro Custo'] || 'N/A'}</td></tr>
-                    <tr><th>Subnúmero</th><td>${item['Subnº'] || 'N/A'}</td></tr>
-                </table>`;
+        function mostrarResultado(codigo, imobilizado) {
+            let html = '';
+            
+            // Verificar se há múltiplos itens
+            if (imobilizado.itens && imobilizado.itens.length > 0) {
+                // Mostrar o primeiro item
+                const itemPrincipal = imobilizado.itens[0];
+                html += `
+                    <table>
+                        <tr><th>Código</th><td>${codigo}</td></tr>
+                        <tr><th>Descrição</th><td>${itemPrincipal.Descrição || 'N/A'}</td></tr>
+                        <tr><th>Data</th><td>${itemPrincipal.Data || 'N/A'}</td></tr>
+                        <tr><th>Inventário</th><td>${itemPrincipal.Inventário || 'N/A'}</td></tr>
+                        <tr><th>Série</th><td>${itemPrincipal.Série || 'N/A'}</td></tr>
+                        <tr><th>Centro de Custo</th><td>${itemPrincipal['Centro Custo'] || 'N/A'}</td></tr>
+                        <tr><th>Subnúmero</th><td>${itemPrincipal['Subnº'] || 'N/A'}</td></tr>
+                    </table>`;
+                
+                // Se houver itens adicionais, mostrar cada um
+                if (imobilizado.itens.length > 1) {
+                    for (let i = 1; i < imobilizado.itens.length; i++) {
+                        const item = imobilizado.itens[i];
+                        html += `
+                            <div class="item-adicional">
+                                <h3>Item Adicional ${i}</h3>
+                                <table>
+                                    <tr><th>Descrição</th><td>${item.Descrição || 'N/A'}</td></tr>
+                                    <tr><th>Data</th><td>${item.Data || 'N/A'}</td></tr>
+                                    <tr><th>Inventário</th><td>${item.Inventário || 'N/A'}</td></tr>
+                                    <tr><th>Série</th><td>${item.Série || 'N/A'}</td></tr>
+                                    <tr><th>Centro de Custo</th><td>${item['Centro Custo'] || 'N/A'}</td></tr>
+                                    <tr><th>Subnúmero</th><td>${item['Subnº'] || 'N/A'}</td></tr>
+                                </table>
+                            </div>`;
+                    }
+                }
+            }
 
             document.getElementById('detalhes').innerHTML = html;
             document.getElementById('resultado').style.display = 'block';
         }
 
+        // Iniciar inventário
+        function iniciarInventario() {
+            inventarioAtivo = true;
+            document.getElementById('inventario-container').style.display = 'block';
+            document.getElementById('iniciar-inventario-btn').style.display = 'none';
+            renderizarInventario();
+        }
+
+        // Fechar inventário
+        function fecharInventario() {
+            document.getElementById('inventario-container').style.display = 'none';
+            document.getElementById('iniciar-inventario-btn').style.display = 'block';
+        }
+
         // Adicionar item ao inventário
-        function adicionarAoInventario(codigo, item) {
+        function adicionarAoInventario(codigo, imobilizado) {
             if (!inventario.find(i => i.codigo === codigo)) {
-                inventario.push({ codigo, ...item });
+                inventario.push({ 
+                    codigo, 
+                    itens: imobilizado.itens 
+                });
                 salvarInventario();
                 renderizarInventario();
             }
@@ -532,7 +647,19 @@
             inventario.forEach(item => {
                 const div = document.createElement("div");
                 div.classList.add("inventario-item");
-                div.textContent = `${item.codigo} - ${item.Descrição || 'Sem descrição'}`;
+                
+                if (item.itens && item.itens.length > 0) {
+                    const itemPrincipal = item.itens[0];
+                    div.textContent = `${item.codigo} - ${itemPrincipal.Descrição || 'Sem descrição'}`;
+                    
+                    // Se houver mais itens, adicionar indicação
+                    if (item.itens.length > 1) {
+                        div.textContent += ` (+ ${item.itens.length - 1} itens adicionais)`;
+                    }
+                } else {
+                    div.textContent = `${item.codigo} - Sem detalhes`;
+                }
+                
                 container.appendChild(div);
             });
         }
@@ -551,12 +678,23 @@
                 return;
             }
 
-            const linhas = inventario.map(item =>
-                `"${item.codigo}","${item.Descrição || ''}","${item.Data || ''}","${item['Centro Custo'] || ''}"`
-            );
+            const linhas = [];
+            
+            // Adicionar cada item e seus subitens
+            inventario.forEach(imobilizado => {
+                if (imobilizado.itens && imobilizado.itens.length > 0) {
+                    imobilizado.itens.forEach((item, index) => {
+                        linhas.push(
+                            `"${imobilizado.codigo}","${index === 0 ? 'Principal' : 'Adicional'}","${item.Descrição || ''}","${item.Data || ''}","${item['Centro Custo'] || ''}","${item['Subnº'] || ''}"`
+                        );
+                    });
+                } else {
+                    linhas.push(`"${imobilizado.codigo}","Principal","Sem detalhes","","",""`);
+                }
+            });
 
             const csvContent = [
-                '"Código","Descrição","Data","Centro de Custo"',
+                '"Código","Tipo","Descrição","Data","Centro de Custo","Subnúmero"',
                 ...linhas
             ].join("\n");
 
@@ -578,6 +716,8 @@
             if (e.key === "Enter") consultar();
         });
         document.getElementById("close-qr-reader").addEventListener("click", fecharLeitorQR);
+        document.getElementById("iniciar-inventario-btn").addEventListener("click", iniciarInventario);
+        document.getElementById("fechar-inventario-btn").addEventListener("click", fecharInventario);
         document.getElementById("limpar-btn").addEventListener("click", limparInventario);
         document.getElementById("exportar-btn").addEventListener("click", exportarRelatorio);
 
