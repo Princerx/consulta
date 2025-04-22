@@ -165,23 +165,47 @@
         }
         .resultado-compacto table {
             font-size: 14px;
+            margin-bottom: 5px;
         }
         .resultado-compacto th {
-            padding: 8px;
+            padding: 6px;
+            width: 25%;
         }
         .resultado-compacto td {
-            padding: 8px;
+            padding: 6px;
         }
-        .item-adicional {
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px dashed #ddd;
-        }
-        .item-adicional h3 {
-            font-size: 16px;
-            margin-top: 0;
+        .item-lista {
             margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .item-lista:last-child {
+            border-bottom: none;
+        }
+        .item-lista h3 {
+            font-size: 16px;
+            margin-top: 5px;
+            margin-bottom: 5px;
             color: #0056b3;
+        }
+        .item-lista-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f5f5f5;
+            padding: 5px 10px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+        }
+        .item-lista-header h3 {
+            margin: 0;
+        }
+        .item-lista-header .item-numero {
+            font-weight: bold;
+            color: #920606;
+        }
+        .item-lista-content {
+            padding: 0 5px;
         }
         table {
             width: 100%;
@@ -189,7 +213,7 @@
             margin-top: 10px;
         }
         th, td {
-            padding: 10px;
+            padding: 8px;
             border: 1px solid #ddd;
             text-align: left;
         }
@@ -287,7 +311,7 @@
     </header>
     
     <div id="input-container">
-        <input type="text" id="input-codigo" placeholder="Digite o código do imobilizado (ex: 10000002)">
+        <input type="text" id="input-codigo" placeholder="Digite o código do imobilizado (ex: 20000076)">
         <button id="consultar-btn" class="btn">🔍 Consultar</button>
         <button id="lerqrcode-btn" class="btn">📷 Ler QR Code</button>
     </div>
@@ -331,79 +355,227 @@
     </footer>
 
     <script>
-        // Dados de exemplo embutidos diretamente no código
-        const dadosImobilizadosExemplo = {
-            "10000002": {
-                "itens": [
-                    {
-                        "Descrição": "NOTEBOOK DELL LATITUDE 5420",
-                        "Data": "01/01/2022",
-                        "Inventário": "SIM",
-                        "Série": "ABC123456",
-                        "Centro Custo": "TI",
-                        "Subnº": "001"
-                    },
-                    {
-                        "Descrição": "CARREGADOR DELL 65W",
-                        "Data": "01/01/2022",
-                        "Inventário": "SIM",
-                        "Série": "DEF789012",
-                        "Centro Custo": "TI",
-                        "Subnº": "001-A"
-                    },
-                    {
-                        "Descrição": "MOUSE SEM FIO DELL",
-                        "Data": "01/01/2022",
-                        "Inventário": "SIM",
-                        "Série": "GHI345678",
-                        "Centro Custo": "TI",
-                        "Subnº": "001-B"
-                    }
-                ]
-            },
-            "10000003": {
-                "itens": [
-                    {
-                        "Descrição": "IMPRESSORA HP LASERJET PRO",
-                        "Data": "15/03/2022",
-                        "Inventário": "SIM",
-                        "Série": "XYZ789012",
-                        "Centro Custo": "ADMINISTRATIVO",
-                        "Subnº": "002"
-                    }
-                ]
-            },
-            "10000004": {
-                "itens": [
-                    {
-                        "Descrição": "MONITOR DELL 24 POLEGADAS",
-                        "Data": "10/05/2022",
-                        "Inventário": "SIM",
-                        "Série": "DEF345678",
-                        "Centro Custo": "PRODUÇÃO",
-                        "Subnº": "003"
-                    },
-                    {
-                        "Descrição": "SUPORTE PARA MONITOR",
-                        "Data": "10/05/2022",
-                        "Inventário": "SIM",
-                        "Série": "N/A",
-                        "Centro Custo": "PRODUÇÃO",
-                        "Subnº": "003-A"
-                    }
-                ]
-            }
-        };
-        
+        // Variáveis globais
+        let dadosImobilizados = {};
         let inventario = [];
         let videoStream = null;
         let inventarioAtivo = false;
         
         // Inicializar a aplicação
-        function inicializar() {
+        async function inicializar() {
             document.getElementById('resultado').style.display = 'none';
             document.getElementById('inventario-container').style.display = 'none';
+            document.getElementById('consultar-btn').disabled = true;
+            document.getElementById('lerqrcode-btn').disabled = true;
+            
+            await carregarDados();
             carregarInventarioSalvo();
+        }
+        
+        // Carregar dados do arquivo JSON
+        async function carregarDados() {
+            try {
+                mostrarLoading('Carregando dados...');
+                
+                // Tentar carregar o arquivo JSON
+                const response = await fetch('dados_imobilizados.json');
+                if (!response.ok) {
+                    throw new Error(`Erro ao carregar dados: ${response.status}`);
+                }
+                
+                // Converter resposta para JSON
+                const dados = await response.json();
+                
+                // Processar os dados para o formato esperado
+                processarDados(dados);
+                
+                document.getElementById('consultar-btn').disabled = false;
+                document.getElementById('lerqrcode-btn').disabled = false;
+                document.getElementById('resultado').style.display = 'none';
+                
+                console.log('Dados carregados com sucesso');
+            } catch (error) {
+                console.error("Erro ao carregar dados:", error);
+                mostrarErro(`Erro ao carregar os dados: ${error.message}. Usando dados de exemplo.`);
+                
+                // Usar dados de exemplo em caso de erro
+                usarDadosExemplo();
+                
+                document.getElementById('consultar-btn').disabled = false;
+                document.getElementById('lerqrcode-btn').disabled = false;
+            }
+        }
+        
+        // Processar dados do JSON para o formato esperado
+        function processarDados(dados) {
+            dadosImobilizados = {};
+            
+            // Verificar o formato dos dados e processar adequadamente
+            if (Array.isArray(dados)) {
+                // Se for um array, processar cada item
+                dados.forEach(item => {
+                    const codigo = item.codigo || item.Codigo || item.CODIGO;
+                    if (codigo) {
+                        // Verificar se já existe um imobilizado com este código
+                        if (!dadosImobilizados[codigo]) {
+                            dadosImobilizados[codigo] = {
+                                itens: []
+                            };
+                        }
+                        
+                        // Adicionar item ao imobilizado
+                        dadosImobilizados[codigo].itens.push(formatarItem(item));
+                    }
+                });
+            } else if (typeof dados === 'object') {
+                // Se for um objeto, verificar se já está no formato esperado
+                if (Object.values(dados).some(item => item.itens)) {
+                    // Já está no formato esperado
+                    dadosImobilizados = dados;
+                } else {
+                    // Converter para o formato esperado
+                    Object.entries(dados).forEach(([codigo, item]) => {
+                        dadosImobilizados[codigo] = {
+                            itens: Array.isArray(item) ? item.map(formatarItem) : [formatarItem(item)]
+                        };
+                    });
+                }
+            }
+            
+            console.log('Dados processados:', dadosImobilizados);
+        }
+        
+        // Formatar item para garantir campos consistentes
+        function formatarItem(item) {
+            return {
+                "Descrição": item.Descrição || item.descricao || item.DESCRICAO || '',
+                "Data": item.Data || item.data || item.DATA || '',
+                "Inventário": item.Inventário || item.inventario || item.INVENTARIO || '',
+                "Série": item.Série || item.serie || item.SERIE || '',
+                "Centro Custo": item["Centro Custo"] || item.centroCusto || item.CENTRO_CUSTO || '',
+                "Subnº": item["Subnº"] || item.subnumero || item.SUBNUMERO || '',
+                "Número": item.Número || item.numero || item.NUMERO || ''
+            };
+        }
+        
+        // Usar dados de exemplo em caso de erro ao carregar o JSON
+        function usarDadosExemplo() {
+            dadosImobilizados = {
+                "20000076": {
+                    "itens": [
+                        {
+                            "Número": "1",
+                            "Data": "11/06/2004",
+                            "Descrição": "FRETE SOBRE IMOBILIZADO NR 12138",
+                            "Centro Custo": "100005002"
+                        },
+                        {
+                            "Número": "2",
+                            "Data": "11/06/2004",
+                            "Descrição": "FRETE SOBRE IMOBILIZADO NR.12139 TRANSP. PAGNO",
+                            "Centro Custo": "100005002"
+                        },
+                        {
+                            "Número": "3",
+                            "Data": "11/06/2004",
+                            "Descrição": "FRETE SOBRE IMOBILIZADO NR.12140 TRANSP. PAGNO",
+                            "Centro Custo": "100005002"
+                        },
+                        {
+                            "Número": "4",
+                            "Data": "11/06/2004",
+                            "Descrição": "FRETE SOBRE IMOBILIZADO NR.12141 TRANSP. PAGNO",
+                            "Centro Custo": "100005002"
+                        },
+                        {
+                            "Número": "5",
+                            "Data": "31/10/2010",
+                            "Descrição": "SERVICO EM INVERSOR DE FREQUENCIA CWF09 142",
+                            "Centro Custo": "100005002"
+                        },
+                        {
+                            "Número": "6",
+                            "Data": "31/12/2011",
+                            "Descrição": "SUB CONJUNTO ROSCA FL/FC MAG. 75-FG E BUCHA",
+                            "Centro Custo": "100005002"
+                        },
+                        {
+                            "Número": "7",
+                            "Data": "30/04/2012",
+                            "Descrição": "CARTAO ELETRONICO UBR/CB-50",
+                            "Centro Custo": "100005002"
+                        },
+                        {
+                            "Número": "8",
+                            "Data": "30/04/2013",
+                            "Descrição": "DOSADOR GRAVIMETRICO GRAVITEC- G4SL300-AC",
+                            "Centro Custo": "100005002"
+                        }
+                    ]
+                },
+                "10000002": {
+                    "itens": [
+                        {
+                            "Descrição": "NOTEBOOK DELL LATITUDE 5420",
+                            "Data": "01/01/2022",
+                            "Inventário": "SIM",
+                            "Série": "ABC123456",
+                            "Centro Custo": "TI",
+                            "Subnº": "001"
+                        },
+                        {
+                            "Descrição": "CARREGADOR DELL 65W",
+                            "Data": "01/01/2022",
+                            "Inventário": "SIM",
+                            "Série": "DEF789012",
+                            "Centro Custo": "TI",
+                            "Subnº": "001-A"
+                        },
+                        {
+                            "Descrição": "MOUSE SEM FIO DELL",
+                            "Data": "01/01/2022",
+                            "Inventário": "SIM",
+                            "Série": "GHI345678",
+                            "Centro Custo": "TI",
+                            "Subnº": "001-B"
+                        }
+                    ]
+                },
+                "10000003": {
+                    "itens": [
+                        {
+                            "Descrição": "IMPRESSORA HP LASERJET PRO",
+                            "Data": "15/03/2022",
+                            "Inventário": "SIM",
+                            "Série": "XYZ789012",
+                            "Centro Custo": "ADMINISTRATIVO",
+                            "Subnº": "002"
+                        }
+                    ]
+                },
+                "10000004": {
+                    "itens": [
+                        {
+                            "Descrição": "MONITOR DELL 24 POLEGADAS",
+                            "Data": "10/05/2022",
+                            "Inventário": "SIM",
+                            "Série": "DEF345678",
+                            "Centro Custo": "PRODUÇÃO",
+                            "Subnº": "003"
+                        },
+                        {
+                            "Descrição": "SUPORTE PARA MONITOR",
+                            "Data": "10/05/2022",
+                            "Inventário": "SIM",
+                            "Série": "N/A",
+                            "Centro Custo": "PRODUÇÃO",
+                            "Subnº": "003-A"
+                        }
+                    ]
+                }
+            };
+            
+            console.log('Usando dados de exemplo');
         }
         
         // Iniciar câmera para leitura de QR code
@@ -450,7 +622,7 @@
                     
                     // Adicionar evento de clique para simular leitura de QR code
                     cameraView.onclick = function() {
-                        const codigoLimpo = "10000002"; // Código de exemplo
+                        const codigoLimpo = "20000076"; // Código de exemplo com múltiplos itens
                         document.getElementById("input-codigo").value = codigoLimpo;
                         fecharLeitorQR();
                         consultar();
@@ -476,7 +648,7 @@
                     `;
                     
                     cameraView.onclick = function() {
-                        const codigoLimpo = "10000002"; // Código de exemplo
+                        const codigoLimpo = "20000076"; // Código de exemplo com múltiplos itens
                         document.getElementById("input-codigo").value = codigoLimpo;
                         fecharLeitorQR();
                         consultar();
@@ -514,10 +686,10 @@
 
             mostrarLoading('Buscando informações...');
             
-            // Simular uma busca nos dados
+            // Buscar nos dados carregados
             setTimeout(() => {
-                if (dadosImobilizadosExemplo[codigo]) {
-                    const imobilizado = dadosImobilizadosExemplo[codigo];
+                if (dadosImobilizados[codigo]) {
+                    const imobilizado = dadosImobilizados[codigo];
                     mostrarResultado(codigo, imobilizado);
                     
                     // Adicionar ao inventário apenas se o inventário estiver ativo
@@ -552,37 +724,51 @@
             
             // Verificar se há múltiplos itens
             if (imobilizado.itens && imobilizado.itens.length > 0) {
-                // Mostrar o primeiro item
-                const itemPrincipal = imobilizado.itens[0];
+                // Informações gerais do imobilizado
                 html += `
-                    <table>
-                        <tr><th>Código</th><td>${codigo}</td></tr>
-                        <tr><th>Descrição</th><td>${itemPrincipal.Descrição || 'N/A'}</td></tr>
-                        <tr><th>Data</th><td>${itemPrincipal.Data || 'N/A'}</td></tr>
-                        <tr><th>Inventário</th><td>${itemPrincipal.Inventário || 'N/A'}</td></tr>
-                        <tr><th>Série</th><td>${itemPrincipal.Série || 'N/A'}</td></tr>
-                        <tr><th>Centro de Custo</th><td>${itemPrincipal['Centro Custo'] || 'N/A'}</td></tr>
-                        <tr><th>Subnúmero</th><td>${itemPrincipal['Subnº'] || 'N/A'}</td></tr>
-                    </table>`;
+                    <div class="codigo-header">
+                        <h3>Código: ${codigo}</h3>
+                        <p>Total de itens: ${imobilizado.itens.length}</p>
+                    </div>`;
                 
-                // Se houver itens adicionais, mostrar cada um
-                if (imobilizado.itens.length > 1) {
-                    for (let i = 1; i < imobilizado.itens.length; i++) {
-                        const item = imobilizado.itens[i];
-                        html += `
-                            <div class="item-adicional">
-                                <h3>Item Adicional ${i}</h3>
+                // Exibir todos os itens em formato de lista
+                html += '<div class="itens-lista">';
+                
+                imobilizado.itens.forEach((item, index) => {
+                    const numero = item.Número || (index + 1);
+                    
+                    html += `
+                        <div class="item-lista">
+                            <div class="item-lista-header">
+                                <h3>Item ${numero}</h3>
+                                <span class="item-numero">${index + 1} de ${imobilizado.itens.length}</span>
+                            </div>
+                            <div class="item-lista-content">
                                 <table>
                                     <tr><th>Descrição</th><td>${item.Descrição || 'N/A'}</td></tr>
-                                    <tr><th>Data</th><td>${item.Data || 'N/A'}</td></tr>
-                                    <tr><th>Inventário</th><td>${item.Inventário || 'N/A'}</td></tr>
-                                    <tr><th>Série</th><td>${item.Série || 'N/A'}</td></tr>
-                                    <tr><th>Centro de Custo</th><td>${item['Centro Custo'] || 'N/A'}</td></tr>
-                                    <tr><th>Subnúmero</th><td>${item['Subnº'] || 'N/A'}</td></tr>
-                                </table>
-                            </div>`;
+                                    <tr><th>Data</th><td>${item.Data || 'N/A'}</td></tr>`;
+                    
+                    // Adicionar campos opcionais apenas se tiverem valor
+                    if (item.Inventário) {
+                        html += `<tr><th>Inventário</th><td>${item.Inventário}</td></tr>`;
                     }
-                }
+                    if (item.Série) {
+                        html += `<tr><th>Série</th><td>${item.Série}</td></tr>`;
+                    }
+                    if (item['Centro Custo']) {
+                        html += `<tr><th>Centro de Custo</th><td>${item['Centro Custo']}</td></tr>`;
+                    }
+                    if (item['Subnº']) {
+                        html += `<tr><th>Subnúmero</th><td>${item['Subnº']}</td></tr>`;
+                    }
+                    
+                    html += `
+                                </table>
+                            </div>
+                        </div>`;
+                });
+                
+                html += '</div>';
             }
 
             document.getElementById('detalhes').innerHTML = html;
@@ -685,16 +871,16 @@
                 if (imobilizado.itens && imobilizado.itens.length > 0) {
                     imobilizado.itens.forEach((item, index) => {
                         linhas.push(
-                            `"${imobilizado.codigo}","${index === 0 ? 'Principal' : 'Adicional'}","${item.Descrição || ''}","${item.Data || ''}","${item['Centro Custo'] || ''}","${item['Subnº'] || ''}"`
+                            `"${imobilizado.codigo}","${item.Número || (index + 1)}","${item.Descrição || ''}","${item.Data || ''}","${item['Centro Custo'] || ''}","${item['Subnº'] || ''}"`
                         );
                     });
                 } else {
-                    linhas.push(`"${imobilizado.codigo}","Principal","Sem detalhes","","",""`);
+                    linhas.push(`"${imobilizado.codigo}","1","Sem detalhes","","",""`);
                 }
             });
 
             const csvContent = [
-                '"Código","Tipo","Descrição","Data","Centro de Custo","Subnúmero"',
+                '"Código","Número","Descrição","Data","Centro de Custo","Subnúmero"',
                 ...linhas
             ].join("\n");
 
