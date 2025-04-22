@@ -99,11 +99,31 @@
             flex-direction: column;
         }
         #qr-reader {
-            width: 80%;
+            width: 90%;
             max-width: 500px;
             background: white;
-            padding: 20px;
+            padding: 10px;
             border-radius: 8px;
+            position: relative;
+        }
+        /* Garantir que o vídeo da câmera seja exibido */
+        #qr-reader video {
+            width: 100% !important;
+            height: auto !important;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        /* Estilo para o scanner */
+        #qr-reader__scan_region {
+            width: 100% !important;
+            min-height: 300px !important;
+        }
+        /* Remover elementos desnecessários */
+        #qr-reader__dashboard_section_swaplink {
+            display: none !important;
+        }
+        #qr-reader__dashboard_section_csr {
+            margin-bottom: 10px;
         }
         #close-qr-reader {
             margin-top: 20px;
@@ -113,6 +133,7 @@
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            font-size: 16px;
         }
         #resultado {
             background: white;
@@ -277,86 +298,95 @@
             }
         }
 
-        // Verificar permissão da câmera e iniciar scanner
+        // Iniciar leitor QR usando a biblioteca Html5QrCode diretamente
         async function iniciarLeitorQR() {
             try {
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
                 statusCamera.textContent = 'Solicitando permissão para acessar a câmera...';
                 
-                // Solicitar permissão explicitamente
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: "environment" 
-                    } 
-                });
-                
-                // Se chegou aqui, a permissão foi concedida
-                statusCamera.textContent = 'Permissão da câmera concedida. Iniciando scanner...';
-                
-                // Parar o stream, pois o scanner irá solicitar novamente
-                stream.getTracks().forEach(track => track.stop());
-                
                 // Mostrar o container do leitor QR
                 const qrReaderContainer = document.getElementById('qr-reader-container');
                 qrReaderContainer.style.display = 'flex';
                 
-                // Criar nova instância do leitor QR se necessário
-                if (!html5QrCode) {
-                    html5QrCode = new Html5Qrcode("qr-reader");
-                }
+                // Limpar o elemento qr-reader para garantir que não haja elementos residuais
+                const qrReaderElement = document.getElementById('qr-reader');
+                qrReaderElement.innerHTML = '';
                 
-                // Parar scanner anterior se estiver ativo
-                if (scannerAtivo) {
+                // Parar scanner anterior se existir
+                if (html5QrCode && scannerAtivo) {
                     try {
                         await html5QrCode.stop();
+                        html5QrCode = null;
                         scannerAtivo = false;
                     } catch (err) {
                         console.error("Erro ao parar scanner anterior:", err);
                     }
                 }
                 
+                // Criar nova instância do leitor QR
+                html5QrCode = new Html5Qrcode("qr-reader");
+                
                 // Configurações do scanner
                 const config = {
                     fps: 10,
                     qrbox: { width: 250, height: 250 },
-                    aspectRatio: 1.0,
-                    formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ]
+                    rememberLastUsedCamera: true,
+                    showTorchButtonIfSupported: true,
+                    showZoomSliderIfSupported: true,
+                    defaultZoomValueIfSupported: 2
                 };
                 
-                // Iniciar o scanner
+                // Iniciar o scanner com câmera traseira
                 await html5QrCode.start(
                     { facingMode: "environment" },
                     config,
-                    (codigo) => {
-                        const codigoLimpo = codigo.trim();
+                    (decodedText) => {
+                        // Sucesso na leitura do QR code
+                        const codigoLimpo = decodedText.trim();
                         document.getElementById("input-codigo").value = codigoLimpo;
                         fecharScannerQR();
                         consultar();
                     },
-                    (erro) => {
-                        if (erro && !erro.message.includes('No QR code found')) {
-                            console.log("Erro no scanner:", erro);
+                    (errorMessage) => {
+                        // Ignorar mensagens de "QR code não encontrado"
+                        if (errorMessage && !errorMessage.includes('No QR code found')) {
+                            console.log("Erro no scanner:", errorMessage);
                         }
                     }
                 );
                 
                 scannerAtivo = true;
-                console.log("Scanner QR iniciado com sucesso");
+                statusCamera.textContent = 'Câmera ativada. Aponte para um QR code.';
                 
-                // Esconder a mensagem de status após 2 segundos
+                // Esconder a mensagem de status após 3 segundos
                 setTimeout(() => {
                     statusCamera.style.display = 'none';
-                }, 2000);
+                }, 3000);
+                
+                // Adicionar estilo para garantir que o vídeo seja exibido
+                setTimeout(() => {
+                    const videoElement = document.querySelector('#qr-reader video');
+                    if (videoElement) {
+                        videoElement.style.width = '100%';
+                        videoElement.style.height = 'auto';
+                        videoElement.style.display = 'block';
+                    }
+                    
+                    const scanRegion = document.querySelector('#qr-reader__scan_region');
+                    if (scanRegion) {
+                        scanRegion.style.minHeight = '300px';
+                    }
+                }, 1000);
                 
             } catch (error) {
-                console.error("Erro ao acessar câmera:", error);
+                console.error("Erro ao iniciar leitor QR:", error);
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
                 statusCamera.textContent = 'Erro ao acessar a câmera: ' + error.message;
                 statusCamera.style.color = 'red';
                 
-                // Fechar o container do leitor QR se estiver aberto
+                // Fechar o container do leitor QR se houver erro
                 const qrReaderContainer = document.getElementById('qr-reader-container');
                 qrReaderContainer.style.display = 'none';
             }
