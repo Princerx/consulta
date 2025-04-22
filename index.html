@@ -65,6 +65,25 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
+        /* Botão separado para leitura de QR Code */
+        #lerqrcode-btn {
+            background-color: #920606;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            margin-left: 5px;
+        }
+        #lerqrcode-btn:hover {
+            background-color: #003d82;
+        }
+        #lerqrcode-btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
         #qr-reader-container {
             display: none;
             position: fixed;
@@ -159,9 +178,6 @@
         .inventario-item:last-child {
             border-bottom: none;
         }
-        .qr-icon {
-            margin-left: 5px;
-        }
     </style>
 </head>
 <body>
@@ -179,10 +195,8 @@
     
     <div id="input-container">
         <input type="text" id="input-codigo" placeholder="Digite o código do imobilizado (ex: 10000002)">
-        <button id="consultar-btn">
-            <span>🔍 Consultar</span>
-            <span class="qr-icon">📷</span>
-        </button>
+        <button id="consultar-btn">🔍 Consultar</button>
+        <button id="lerqrcode-btn">📷 Ler QR Code</button>
     </div>
     
     <div id="resultado">
@@ -220,6 +234,7 @@
         async function carregarDados() {
             try {
                 document.getElementById('consultar-btn').disabled = true;
+                document.getElementById('lerqrcode-btn').disabled = true;
                 mostrarLoading('Carregando dados...');
                 
                 const response = await fetch('dados_imobilizados.json');
@@ -227,12 +242,14 @@
                 
                 dadosImobilizados = await response.json();
                 document.getElementById('consultar-btn').disabled = false;
+                document.getElementById('lerqrcode-btn').disabled = false;
                 document.getElementById('resultado').style.display = 'none';
                 carregarInventarioSalvo();
             } catch (error) {
                 console.error("Erro:", error);
                 mostrarErro(`Erro ao carregar os dados: ${error.message}`);
                 document.getElementById('consultar-btn').disabled = true;
+                document.getElementById('lerqrcode-btn').disabled = true;
             }
         }
 
@@ -409,18 +426,12 @@
             document.body.removeChild(link);
         }
 
-        document.getElementById("consultar-btn").addEventListener("click", function(e) {
-            if (e.target.classList.contains('qr-icon') || e.target.parentElement.classList.contains('qr-icon')) {
-                iniciarScannerQR();
-            } else {
-                consultar();
-            }
-        });
-
+        // Eventos para os botões
+        document.getElementById("consultar-btn").addEventListener("click", consultar);
+        document.getElementById("lerqrcode-btn").addEventListener("click", iniciarScannerQR);
         document.getElementById("input-codigo").addEventListener("keypress", function(e) {
             if (e.key === "Enter") consultar();
         });
-
         document.getElementById("close-qr-reader").addEventListener("click", fecharScannerQR);
         document.getElementById("limpar-btn").addEventListener("click", limparInventario);
         document.getElementById("exportar-btn").addEventListener("click", exportarRelatorio);
