@@ -103,7 +103,6 @@
             justify-content: center;
             align-items: center;
             flex-direction: column;
-            cursor: pointer;
             position: relative;
             overflow: hidden;
         }
@@ -295,6 +294,20 @@
                 flex-direction: column;
             }
         }
+        #qr-debug {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            display: none;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        #canvas {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -317,6 +330,7 @@
     </div>
     
     <div id="status-camera"></div>
+    <div id="qr-debug"></div>
     
     <div id="resultado" class="resultado-compacto">
         <h2>Informações do Imobilizado</h2>
@@ -345,7 +359,8 @@
                     <div id="camera-frame"></div>
                 </div>
             </div>
-            <div id="camera-instructions">Toque na tela para simular a leitura de um QR code</div>
+            <div id="camera-instructions">Posicione o QR code no centro da tela</div>
+            <canvas id="canvas"></canvas>
         </div>
         <button id="close-qr-reader" class="btn btn-danger">Fechar Leitor QR</button>
     </div>
@@ -354,12 +369,16 @@
         Sistema de Consulta de Imobilizados | Desenvolvido para Videplast
     </footer>
 
+    <!-- Adicionar a biblioteca jsQR -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+
     <script>
         // Variáveis globais
         let dadosImobilizados = {};
         let inventario = [];
         let videoStream = null;
         let inventarioAtivo = false;
+        let scanInterval = null;
         
         // Inicializar a aplicação
         async function inicializar() {
@@ -370,6 +389,22 @@
             
             await carregarDados();
             carregarInventarioSalvo();
+            
+            // Adicionar event listeners
+            document.getElementById('consultar-btn').addEventListener('click', consultar);
+            document.getElementById('lerqrcode-btn').addEventListener('click', iniciarLeitorQR);
+            document.getElementById('close-qr-reader').addEventListener('click', fecharLeitorQR);
+            document.getElementById('iniciar-inventario-btn').addEventListener('click', iniciarInventario);
+            document.getElementById('fechar-inventario-btn').addEventListener('click', fecharInventario);
+            document.getElementById('limpar-btn').addEventListener('click', limparInventario);
+            document.getElementById('exportar-btn').addEventListener('click', exportarInventario);
+            
+            // Permitir consulta ao pressionar Enter no campo de entrada
+            document.getElementById('input-codigo').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    consultar();
+                }
+            });
         }
         
         // Carregar dados do arquivo JSON
@@ -474,130 +509,126 @@
                             "Data": "11/06/2004",
                             "Descrição": "FRETE SOBRE IMOBILIZADO NR.12139 TRANSP. PAGNO",
                             "Centro Custo": "100005002"
-                        },
-                        {
-                            "Número": "3",
-                            "Data": "11/06/2004",
-                            "Descrição": "FRETE SOBRE IMOBILIZADO NR.12140 TRANSP. PAGNO",
-                            "Centro Custo": "100005002"
-                        },
-                        {
-                            "Número": "4",
-                            "Data": "11/06/2004",
-                            "Descrição": "FRETE SOBRE IMOBILIZADO NR.12141 TRANSP. PAGNO",
-                            "Centro Custo": "100005002"
-                        },
-                        {
-                            "Número": "5",
-                            "Data": "31/10/2010",
-                            "Descrição": "SERVICO EM INVERSOR DE FREQUENCIA CWF09 142",
-                            "Centro Custo": "100005002"
-                        },
-                        {
-                            "Número": "6",
-                            "Data": "31/12/2011",
-                            "Descrição": "SUB CONJUNTO ROSCA FL/FC MAG. 75-FG E BUCHA",
-                            "Centro Custo": "100005002"
-                        },
-                        {
-                            "Número": "7",
-                            "Data": "30/04/2012",
-                            "Descrição": "CARTAO ELETRONICO UBR/CB-50",
-                            "Centro Custo": "100005002"
-                        },
-                        {
-                            "Número": "8",
-                            "Data": "30/04/2013",
-                            "Descrição": "DOSADOR GRAVIMETRICO GRAVITEC- G4SL300-AC",
-                            "Centro Custo": "100005002"
                         }
                     ]
                 },
-                "10000002": {
+                "32003013": {
                     "itens": [
                         {
-                            "Descrição": "NOTEBOOK DELL LATITUDE 5420",
-                            "Data": "01/01/2022",
-                            "Inventário": "SIM",
-                            "Série": "ABC123456",
-                            "Centro Custo": "TI",
-                            "Subnº": "001"
-                        },
-                        {
-                            "Descrição": "CARREGADOR DELL 65W",
-                            "Data": "01/01/2022",
-                            "Inventário": "SIM",
-                            "Série": "DEF789012",
-                            "Centro Custo": "TI",
-                            "Subnº": "001-A"
-                        },
-                        {
-                            "Descrição": "MOUSE SEM FIO DELL",
-                            "Data": "01/01/2022",
-                            "Inventário": "SIM",
-                            "Série": "GHI345678",
-                            "Centro Custo": "TI",
-                            "Subnº": "001-B"
-                        }
-                    ]
-                },
-                "10000003": {
-                    "itens": [
-                        {
-                            "Descrição": "IMPRESSORA HP LASERJET PRO",
-                            "Data": "15/03/2022",
-                            "Inventário": "SIM",
-                            "Série": "XYZ789012",
-                            "Centro Custo": "ADMINISTRATIVO",
-                            "Subnº": "002"
-                        }
-                    ]
-                },
-                "10000004": {
-                    "itens": [
-                        {
-                            "Descrição": "MONITOR DELL 24 POLEGADAS",
-                            "Data": "10/05/2022",
-                            "Inventário": "SIM",
-                            "Série": "DEF345678",
-                            "Centro Custo": "PRODUÇÃO",
-                            "Subnº": "003"
-                        },
-                        {
-                            "Descrição": "SUPORTE PARA MONITOR",
-                            "Data": "10/05/2022",
-                            "Inventário": "SIM",
-                            "Série": "N/A",
-                            "Centro Custo": "PRODUÇÃO",
-                            "Subnº": "003-A"
+                            "Número": "1",
+                            "Data": "15/03/2023",
+                            "Descrição": "EQUIPAMENTO DE TESTE",
+                            "Centro Custo": "100005003"
                         }
                     ]
                 }
             };
-            
-            console.log('Usando dados de exemplo');
         }
         
-        // Iniciar câmera para leitura de QR code
+        // Carregar inventário salvo
+        function carregarInventarioSalvo() {
+            const inventarioSalvo = localStorage.getItem('inventario');
+            if (inventarioSalvo) {
+                try {
+                    inventario = JSON.parse(inventarioSalvo);
+                } catch (error) {
+                    console.error("Erro ao carregar inventário:", error);
+                    inventario = [];
+                }
+            }
+        }
+        
+        // Salvar inventário
+        function salvarInventario() {
+            localStorage.setItem('inventario', JSON.stringify(inventario));
+        }
+        
+        // Renderizar inventário
+        function renderizarInventario() {
+            const inventarioList = document.getElementById('inventario-list');
+            inventarioList.innerHTML = '';
+            
+            if (inventario.length === 0) {
+                inventarioList.innerHTML = '<p>Nenhum item no inventário.</p>';
+                return;
+            }
+            
+            inventario.forEach(item => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'inventario-item';
+                
+                const descricao = item.itens && item.itens.length > 0 ? 
+                    item.itens[0].Descrição : 'Sem descrição';
+                
+                itemElement.innerHTML = `
+                    <strong>${item.codigo}</strong> - ${descricao}
+                    <span style="color: #0056b3;">(${item.itens ? item.itens.length : 0} itens)</span>
+                `;
+                
+                inventarioList.appendChild(itemElement);
+            });
+        }
+        
+        // Limpar inventário
+        function limparInventario() {
+            if (confirm('Tem certeza que deseja limpar o inventário?')) {
+                inventario = [];
+                salvarInventario();
+                renderizarInventario();
+            }
+        }
+        
+        // Exportar inventário
+        function exportarInventario() {
+            if (inventario.length === 0) {
+                alert('Não há itens no inventário para exportar.');
+                return;
+            }
+            
+            let csv = 'Código,Descrição,Data,Inventário,Série,Centro Custo,Subnúmero\n';
+            
+            inventario.forEach(item => {
+                if (item.itens && item.itens.length > 0) {
+                    item.itens.forEach(subitem => {
+                        csv += `${item.codigo},`;
+                        csv += `"${subitem.Descrição || ''}",`;
+                        csv += `"${subitem.Data || ''}",`;
+                        csv += `"${subitem.Inventário || ''}",`;
+                        csv += `"${subitem.Série || ''}",`;
+                        csv += `"${subitem['Centro Custo'] || ''}",`;
+                        csv += `"${subitem['Subnº'] || ''}"\n`;
+                    });
+                } else {
+                    csv += `${item.codigo},"","","","","",""\n`;
+                }
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'inventario_imobilizados.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        // Iniciar leitor QR
         async function iniciarLeitorQR() {
             try {
-                const statusCamera = document.getElementById('status-camera');
-                statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Solicitando permissão para acessar a câmera...';
-                
-                // Mostrar o container do leitor QR
                 const qrReaderContainer = document.getElementById('qr-reader-container');
                 qrReaderContainer.style.display = 'flex';
                 
-                // Tentar acessar a câmera
+                const statusCamera = document.getElementById('status-camera');
+                statusCamera.style.display = 'block';
+                statusCamera.textContent = 'Iniciando câmera...';
+                statusCamera.style.color = 'black';
+                
                 try {
                     const cameraView = document.getElementById('camera-view');
                     const video = document.createElement('video');
-                    video.style.width = '100%';
-                    video.style.height = '100%';
-                    video.style.objectFit = 'cover';
-                    video.setAttribute('playsinline', 'true');
-                    video.setAttribute('autoplay', 'true');
+                    video.setAttribute('playsinline', true);
                     
                     // Limpar o elemento camera-view
                     while (cameraView.firstChild) {
@@ -618,15 +649,53 @@
                     video.srcObject = videoStream;
                     await video.play();
                     
-                    statusCamera.textContent = 'Câmera ativada. Toque na tela para simular a leitura de um QR code.';
+                    statusCamera.textContent = 'Câmera ativada. Posicione o QR code no centro da tela.';
                     
-                    // Adicionar evento de clique para simular leitura de QR code
-                    cameraView.onclick = function() {
-                        const codigoLimpo = "20000076"; // Código de exemplo com múltiplos itens
-                        document.getElementById("input-codigo").value = codigoLimpo;
-                        fecharLeitorQR();
-                        consultar();
-                    };
+                    // Configurar canvas para processamento do QR code
+                    const canvas = document.getElementById('canvas');
+                    const canvasContext = canvas.getContext('2d');
+                    const qrDebug = document.getElementById('qr-debug');
+                    
+                    // Iniciar escaneamento periódico
+                    if (scanInterval) {
+                        clearInterval(scanInterval);
+                    }
+                    
+                    scanInterval = setInterval(() => {
+                        if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                            // Definir dimensões do canvas para corresponder ao vídeo
+                            canvas.width = video.videoWidth;
+                            canvas.height = video.videoHeight;
+                            
+                            // Desenhar o quadro atual do vídeo no canvas
+                            canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+                            
+                            // Obter dados da imagem do canvas
+                            const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+                            
+                            // Tentar decodificar o QR code
+                            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                                inversionAttempts: "dontInvert",
+                            });
+                            
+                            // Se um QR code for encontrado
+                            if (code) {
+                                qrDebug.style.display = 'block';
+                                qrDebug.textContent = `QR Code detectado: ${code.data}`;
+                                
+                                // Parar o escaneamento
+                                clearInterval(scanInterval);
+                                
+                                // Processar o código lido
+                                const codigoLimpo = code.data.trim();
+                                document.getElementById("input-codigo").value = codigoLimpo;
+                                
+                                // Fechar o leitor QR e consultar o código
+                                fecharLeitorQR();
+                                consultar();
+                            }
+                        }
+                    }, 100); // Verificar a cada 100ms
                     
                     // Esconder a mensagem de status após 3 segundos
                     setTimeout(() => {
@@ -643,16 +712,9 @@
                     cameraView.innerHTML = `
                         <div style="text-align: center; padding: 20px;">
                             <p style="color: #d9534f;">Não foi possível acessar a câmera.</p>
-                            <p>Clique aqui para simular a leitura de um QR code.</p>
+                            <p>Digite o código manualmente ou tente novamente.</p>
                         </div>
                     `;
-                    
-                    cameraView.onclick = function() {
-                        const codigoLimpo = "20000076"; // Código de exemplo com múltiplos itens
-                        document.getElementById("input-codigo").value = codigoLimpo;
-                        fecharLeitorQR();
-                        consultar();
-                    };
                 }
                 
             } catch (error) {
@@ -669,11 +731,20 @@
             const qrReaderContainer = document.getElementById('qr-reader-container');
             qrReaderContainer.style.display = 'none';
             
+            // Parar o escaneamento
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+            
             // Parar o stream de vídeo se estiver ativo
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
                 videoStream = null;
             }
+            
+            // Esconder debug
+            document.getElementById('qr-debug').style.display = 'none';
         }
 
         // Consultar código
@@ -801,114 +872,8 @@
             }
         }
 
-        // Carregar inventário salvo do localStorage
-        function carregarInventarioSalvo() {
-            const salvo = localStorage.getItem("inventario");
-            if (salvo) {
-                try {
-                    inventario = JSON.parse(salvo);
-                    renderizarInventario();
-                } catch (e) {
-                    console.error("Erro ao carregar inventário salvo:", e);
-                    inventario = [];
-                }
-            }
-        }
-
-        // Salvar inventário no localStorage
-        function salvarInventario() {
-            localStorage.setItem("inventario", JSON.stringify(inventario));
-        }
-
-        // Renderizar lista de inventário
-        function renderizarInventario() {
-            const container = document.getElementById("inventario-list");
-            container.innerHTML = "";
-
-            if (inventario.length === 0) {
-                container.innerHTML = "<p style='color:#888;'>Nenhum item consultado ainda.</p>";
-                return;
-            }
-
-            inventario.forEach(item => {
-                const div = document.createElement("div");
-                div.classList.add("inventario-item");
-                
-                if (item.itens && item.itens.length > 0) {
-                    const itemPrincipal = item.itens[0];
-                    div.textContent = `${item.codigo} - ${itemPrincipal.Descrição || 'Sem descrição'}`;
-                    
-                    // Se houver mais itens, adicionar indicação
-                    if (item.itens.length > 1) {
-                        div.textContent += ` (+ ${item.itens.length - 1} itens adicionais)`;
-                    }
-                } else {
-                    div.textContent = `${item.codigo} - Sem detalhes`;
-                }
-                
-                container.appendChild(div);
-            });
-        }
-
-        // Limpar inventário
-        function limparInventario() {
-            inventario = [];
-            salvarInventario();
-            renderizarInventario();
-        }
-
-        // Exportar relatório
-        function exportarRelatorio() {
-            if (inventario.length === 0) {
-                alert("Nenhum item no inventário para exportar.");
-                return;
-            }
-
-            const linhas = [];
-            
-            // Adicionar cada item e seus subitens
-            inventario.forEach(imobilizado => {
-                if (imobilizado.itens && imobilizado.itens.length > 0) {
-                    imobilizado.itens.forEach((item, index) => {
-                        linhas.push(
-                            `"${imobilizado.codigo}","${item.Número || (index + 1)}","${item.Descrição || ''}","${item.Data || ''}","${item['Centro Custo'] || ''}","${item['Subnº'] || ''}"`
-                        );
-                    });
-                } else {
-                    linhas.push(`"${imobilizado.codigo}","1","Sem detalhes","","",""`);
-                }
-            });
-
-            const csvContent = [
-                '"Código","Número","Descrição","Data","Centro de Custo","Subnúmero"',
-                ...linhas
-            ].join("\n");
-
-            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", "relatorio_inventario.csv");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
-
-        // Eventos para os botões
-        document.getElementById("consultar-btn").addEventListener("click", consultar);
-        document.getElementById("lerqrcode-btn").addEventListener("click", iniciarLeitorQR);
-        document.getElementById("input-codigo").addEventListener("keypress", function(e) {
-            if (e.key === "Enter") consultar();
-        });
-        document.getElementById("close-qr-reader").addEventListener("click", fecharLeitorQR);
-        document.getElementById("iniciar-inventario-btn").addEventListener("click", iniciarInventario);
-        document.getElementById("fechar-inventario-btn").addEventListener("click", fecharInventario);
-        document.getElementById("limpar-btn").addEventListener("click", limparInventario);
-        document.getElementById("exportar-btn").addEventListener("click", exportarRelatorio);
-
-        // Inicializar a aplicação quando o DOM estiver carregado
-        document.addEventListener("DOMContentLoaded", inicializar);
+        // Inicializar a aplicação quando o documento estiver carregado
+        document.addEventListener('DOMContentLoaded', inicializar);
     </script>
 </body>
 </html>
