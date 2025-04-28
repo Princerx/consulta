@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Consulta de Imobilizados - Videplast</title>
+    <title>Consulta de Imobilizados - Videplast (Modificado)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
+        /* Estilos CSS permanecem os mesmos do arquivo original */
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
             max-width: 900px;
@@ -304,6 +305,7 @@
             font-size: 12px;
             max-height: 100px;
             overflow-y: auto;
+            word-wrap: break-word;
         }
         #canvas {
             display: none;
@@ -335,7 +337,7 @@
     </header>
     
     <div id="input-container">
-        <input type="text" id="input-codigo" placeholder="Digite o código do imobilizado (ex: 20000076)">
+        <input type="text" id="input-codigo" placeholder="Digite o código do imobilizado (ex: 009833)">
         <button id="consultar-btn" class="btn">🔍 Consultar</button>
         <button id="ler-code-btn" class="btn">📷 Ler Código</button>
     </div>
@@ -366,6 +368,7 @@
     <div id="scanner-container">
         <div id="scanner-view">
             <div id="camera-view">
+                <video playsinline style="width: 100%; height: 100%; object-fit: cover;"></video>
                 <div id="scanner-line"></div>
                 <div id="camera-overlay">
                     <div id="camera-frame"></div>
@@ -393,7 +396,10 @@
         let inventarioAtivo = false;
         let scanInterval = null;
         let quaggaInitialized = false;
-        
+        let isProcessingCode = false; // Flag para evitar processamento múltiplo
+        const CODIGO_FORMATO_ESPERADO = /^[0-9]{6}$/; // MODIFICADO: Define o formato esperado (6 dígitos)
+        // Ajuste a expressão regular acima (^[0-9]{6}$) se o formato for diferente (ex: /^[0-9]+$/ para apenas números)
+
         // Inicializar a aplicação
         async function inicializar() {
             document.getElementById('resultado').style.display = 'none';
@@ -425,31 +431,20 @@
         async function carregarDados() {
             try {
                 mostrarLoading('Carregando dados...');
-                
-                // Tentar carregar o arquivo JSON
                 const response = await fetch('dados_imobilizados.json');
                 if (!response.ok) {
-                    throw new Error(`Erro ao carregar dados: ${response.status}`);
+                    throw new Error(`Erro HTTP: ${response.status}`);
                 }
-                
-                // Converter resposta para JSON
                 const dados = await response.json();
-                
-                // Processar os dados para o formato esperado
                 processarDados(dados);
-                
                 document.getElementById('consultar-btn').disabled = false;
                 document.getElementById('ler-code-btn').disabled = false;
                 document.getElementById('resultado').style.display = 'none';
-                
                 console.log('Dados carregados com sucesso');
             } catch (error) {
                 console.error("Erro ao carregar dados:", error);
-                mostrarErro(`Erro ao carregar os dados: ${error.message}. Usando dados de exemplo.`);
-                
-                // Usar dados de exemplo em caso de erro
+                mostrarErro(`Falha ao carregar dados: ${error.message}. Usando dados de exemplo.`);
                 usarDadosExemplo();
-                
                 document.getElementById('consultar-btn').disabled = false;
                 document.getElementById('ler-code-btn').disabled = false;
             }
@@ -458,10 +453,9 @@
         // Processar dados do JSON para o formato esperado
         function processarDados(dados) {
             dadosImobilizados = {};
-            
             if (Array.isArray(dados)) {
                 dados.forEach(item => {
-                    const codigo = item.codigo || item.Codigo || item.CODIGO;
+                    const codigo = String(item.codigo || item.Codigo || item.CODIGO || '').trim();
                     if (codigo) {
                         if (!dadosImobilizados[codigo]) {
                             dadosImobilizados[codigo] = { itens: [] };
@@ -469,37 +463,38 @@
                         dadosImobilizados[codigo].itens.push(formatarItem(item));
                     }
                 });
-            } else if (typeof dados === 'object') {
-                if (Object.values(dados).some(item => item.itens)) {
-                    dadosImobilizados = dados;
-                } else {
-                    Object.entries(dados).forEach(([codigo, item]) => {
-                        dadosImobilizados[codigo] = {
-                            itens: Array.isArray(item) ? item.map(formatarItem) : [formatarItem(item)]
-                        };
-                    });
-                }
+            } else {
+                console.warn("Formato de dados inesperado. Esperava um array.");
             }
-            
             console.log('Dados processados:', dadosImobilizados);
         }
         
         // Formatar item para garantir campos consistentes
         function formatarItem(item) {
             return {
-                "Descrição": item.Descrição || item.descricao || item.DESCRICAO || '',
-                "Data": item.Data || item.data || item.DATA || '',
-                "Inventário": item.Inventário || item.inventario || item.INVENTARIO || '',
-                "Série": item.Série || item.serie || item.SERIE || '',
-                "Centro Custo": item["Centro Custo"] || item.centroCusto || item.CENTRO_CUSTO || '',
-                "Subnº": item["Subnº"] || item.subnumero || item.SUBNUMERO || '',
-                "Número": item.Número || item.numero || item.NUMERO || ''
+                "Descrição": item.Descrição || item.descricao || item.DESCRICAO || 'N/A',
+                "Data": item.Data || item.data || item.DATA || 'N/A',
+                "Inventário": item.Inventário || item.inventario || item.INVENTARIO || 'N/A',
+                "Série": item.Série || item.serie || item.SERIE || 'N/A',
+                "Centro Custo": item["Centro Custo"] || item.centroCusto || item.CENTRO_CUSTO || 'N/A',
+                "Subnº": item["Subnº"] || item.subnumero || item.SUBNUMERO || 'N/A',
+                "Número": item.Número || item.numero || item.NUMERO || 'N/A'
             };
         }
         
         // Usar dados de exemplo em caso de erro ao carregar o JSON
         function usarDadosExemplo() {
-            dadosImobilizados = {
+             dadosImobilizados = {
+                "009833": { // Adicionado exemplo do usuário
+                    "itens": [
+                        {
+                            "Número": "1",
+                            "Data": "01/01/2024",
+                            "Descrição": "ITEM DE EXEMPLO 009833",
+                            "Centro Custo": "100005001"
+                        }
+                    ]
+                },
                 "20000076": {
                     "itens": [
                         {
@@ -525,19 +520,9 @@
                             "Centro Custo": "100005003"
                         }
                     ]
-                },
-                "MS548732": { // Exemplo de código MANUS
-                    "itens": [
-                        {
-                            "Número": "1",
-                            "Data": "10/01/2023",
-                            "Descrição": "EQUIPAMENTO DE PRODUÇÃO - LINHA 2",
-                            "Centro Custo": "100005004",
-                            "Série": "SN-548732-01"
-                        }
-                    ]
                 }
             };
+            console.log("Usando dados de exemplo.");
         }
         
         // Carregar inventário salvo
@@ -562,24 +547,15 @@
         function renderizarInventario() {
             const inventarioList = document.getElementById('inventario-list');
             inventarioList.innerHTML = '';
-            
             if (inventario.length === 0) {
                 inventarioList.innerHTML = '<p>Nenhum item no inventário.</p>';
                 return;
             }
-            
             inventario.forEach(item => {
                 const itemElement = document.createElement('div');
                 itemElement.className = 'inventario-item';
-                
-                const descricao = item.itens && item.itens.length > 0 ? 
-                    item.itens[0].Descrição : 'Sem descrição';
-                
-                itemElement.innerHTML = `
-                    <strong>${item.codigo}</strong> - ${descricao}
-                    <span style="color: #0056b3;">(${item.itens ? item.itens.length : 0} itens)</span>
-                `;
-                
+                const descricao = item.itens && item.itens.length > 0 ? item.itens[0].Descrição : 'Sem descrição';
+                itemElement.innerHTML = `<strong>${item.codigo}</strong> - ${descricao} <span style="color: #0056b3;">(${item.itens ? item.itens.length : 0} itens)</span>`;
                 inventarioList.appendChild(itemElement);
             });
         }
@@ -599,26 +575,17 @@
                 alert('Não há itens no inventário para exportar.');
                 return;
             }
-            
             let csv = 'Código,Descrição,Data,Inventário,Série,Centro Custo,Subnúmero\n';
-            
             inventario.forEach(item => {
                 if (item.itens && item.itens.length > 0) {
                     item.itens.forEach(subitem => {
-                        csv += `${item.codigo},`;
-                        csv += `"${subitem.Descrição || ''}",`;
-                        csv += `"${subitem.Data || ''}",`;
-                        csv += `"${subitem.Inventário || ''}",`;
-                        csv += `"${subitem.Série || ''}",`;
-                        csv += `"${subitem['Centro Custo'] || ''}",`;
-                        csv += `"${subitem['Subnº'] || ''}"\n`;
+                        csv += `${item.codigo},"${subitem.Descrição || ''}","${subitem.Data || ''}","${subitem.Inventário || ''}","${subitem.Série || ''}","${subitem['Centro Custo'] || ''}","${subitem['Subnº'] || ''}"\n`;
                     });
                 } else {
                     csv += `${item.codigo},"","","","","",""\n`;
                 }
             });
-            
-            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' }); // Adicionado BOM para Excel
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.setAttribute('href', url);
@@ -631,316 +598,332 @@
         
         // Iniciar leitor (QR Code e Código de Barras)
         async function iniciarLeitor() {
+            if (isProcessingCode) return; // Evita iniciar se já estiver processando
+            
+            const scannerContainer = document.getElementById('scanner-container');
+            scannerContainer.style.display = 'flex';
+            const statusCamera = document.getElementById('status-camera');
+            const scannerDebug = document.getElementById('scanner-debug');
+            scannerDebug.style.display = 'none'; // Limpa debug anterior
+            scannerDebug.textContent = '';
+            statusCamera.style.display = 'block';
+            statusCamera.textContent = 'Iniciando câmera...';
+            statusCamera.style.color = 'black';
+            isProcessingCode = false; // Reseta a flag
+
             try {
-                const scannerContainer = document.getElementById('scanner-container');
-                scannerContainer.style.display = 'flex';
-
-                const statusCamera = document.getElementById('status-camera');
-                statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Iniciando câmera...';
-                statusCamera.style.color = 'black';
-
-                try {
-                    const cameraView = document.getElementById('camera-view');
-                    const video = document.createElement('video');
+                const cameraView = document.getElementById('camera-view');
+                let video = cameraView.querySelector('video');
+                if (!video) {
+                    video = document.createElement('video');
                     video.setAttribute('playsinline', true);
-
-                    // Limpar o elemento camera-view
-                    while (cameraView.firstChild) {
-                        if (!cameraView.firstChild.id || 
-                            (cameraView.firstChild.id !== 'scanner-line' && 
-                             cameraView.firstChild.id !== 'camera-overlay')) {
-                            cameraView.removeChild(cameraView.firstChild);
-                        } else {
-                            break;
-                        }
-                    }
-
                     cameraView.insertBefore(video, cameraView.firstChild);
+                }
 
-                    // Solicitar acesso à câmera
-                    videoStream = await navigator.mediaDevices.getUserMedia({
-                        video: { 
-                            facingMode: 'environment',
-                            width: { ideal: 1280 },
-                            height: { ideal: 720 }
+                // Solicitar acesso à câmera com resolução otimizada
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 640 }, // MODIFICADO: Resolução menor
+                        height: { ideal: 480 } // MODIFICADO: Resolução menor
+                    }
+                });
+
+                video.srcObject = videoStream;
+                await video.play();
+                statusCamera.textContent = 'Câmera ativada. Posicione o código.';
+
+                const canvas = document.getElementById('canvas');
+                const canvasContext = canvas.getContext('2d');
+
+                // Iniciar QuaggaJS com configuração otimizada
+                if (!quaggaInitialized) {
+                    Quagga.init({
+                        inputStream: {
+                            name: "Live",
+                            type: "LiveStream",
+                            target: video,
+                            constraints: {
+                                facingMode: "environment",
+                                width: { ideal: 640 }, // MODIFICADO
+                                height: { ideal: 480 } // MODIFICADO
+                            },
+                            area: { // Opcional: Restringir área de detecção (ajuste conforme necessário)
+                                top: "20%",
+                                right: "10%",
+                                left: "10%",
+                                bottom: "20%"
+                            }
+                        },
+                        decoder: {
+                             readers: [
+                                "code_128_reader", 
+                                "ean_reader",
+                                "i2of5_reader" // MODIFICADO: Leitores mais comuns para numéricos
+                                // Adicione outros leitores se necessário, mas menos é melhor para performance
+                            ],
+                            debug: {
+                                drawBoundingBox: true,
+                                showFrequency: false, // Desabilitado para performance
+                                drawScanline: true,
+                                showPattern: false // Desabilitado para performance
+                            }
+                        },
+                        locate: true, // Habilitar localização
+                        locator: { // MODIFICADO: Ajustes no localizador
+                             patchSize: "medium", // 'x-small', 'small', 'medium', 'large', 'x-large'
+                             halfSample: true
+                        },
+                        frequency: 10, // Tentar decodificar 10 vezes por segundo
+                        numOfWorkers: navigator.hardwareConcurrency || 4, // Usar múltiplos núcleos se disponíveis
+                    }, function(err) {
+                        if (err) {
+                            console.error("Erro ao inicializar Quagga:", err);
+                            scannerDebug.style.display = 'block';
+                            scannerDebug.textContent = `Erro QuaggaJS: ${err.message}`;
+                            fecharLeitor(); // Fecha se não conseguir inicializar
+                            return;
+                        }
+                        quaggaInitialized = true;
+                        Quagga.start();
+                        console.log("QuaggaJS iniciado.");
+                    });
+
+                    Quagga.onDetected(handleDetection);
+                    Quagga.onProcessed(function(result) {
+                        // Opcional: Desenhar caixa delimitadora e linha
+                        var drawingCtx = Quagga.canvas.ctx.overlay,
+                            drawingCanvas = Quagga.canvas.dom.overlay;
+
+                        if (result) {
+                            if (result.boxes) {
+                                drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                                result.boxes.filter(function (box) {
+                                    return box !== result.box;
+                                }).forEach(function (box) {
+                                    Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                                });
+                            }
+
+                            if (result.box) {
+                                Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
+                            }
+
+                            if (result.codeResult && result.codeResult.code) {
+                                // Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
+                            }
                         }
                     });
 
-                    video.srcObject = videoStream;
-                    await video.play();
+                } else {
+                    // Se já inicializado, apenas reinicia
+                    Quagga.start();
+                }
 
-                    statusCamera.textContent = 'Câmera ativada. Posicione o código na área destacada.';
-
-                    // Configurar canvas para processamento
-                    const canvas = document.getElementById('canvas');
-                    const canvasContext = canvas.getContext('2d');
-                    const scannerDebug = document.getElementById('scanner-debug');
-
-                    // Iniciar QuaggaJS para leitura de códigos de barras
-                    if (!quaggaInitialized) {
-                        Quagga.init({
-                            inputStream: {
-                                name: "Live",
-                                type: "LiveStream",
-                                target: video,
-                                constraints: {
-                                    facingMode: "environment",
-                                    width: { ideal: 1280 },
-                                    height: { ideal: 720 }
-                                }
-                            },
-                            decoder: {
-                                readers: [
-                                    "code_128_reader",  // Código 128 (inclui GS1-128)
-                                    "ean_reader",       // EAN-13, EAN-8
-                                    "upc_reader",       // UPC-A, UPC-E
-                                    "code_39_reader",   // Código 39
-                                    "code_39_vin_reader", // Código 39 VIN
-                                    "codabar_reader",   // Codabar
-                                    "i2of5_reader"      // Interleaved 2 of 5
-                                ]
-                            },
-                            locate: true,
-                            debug: {
-                                drawBoundingBox: true,
-                                showFrequency: true,
-                                drawScanline: true,
-                                showPattern: true
-                            }
-                        }, function(err) {
-                            if (err) {
-                                console.error("Erro ao inicializar Quagga:", err);
-                                scannerDebug.style.display = 'block';
-                                scannerDebug.textContent = `Erro QuaggaJS: ${err.message}`;
-                                return;
-                            }
-                            quaggaInitialized = true;
-                            Quagga.start();
-                        });
-
-                        Quagga.onDetected(function(result) {
-                            if (result && result.codeResult) {
-                                const code = result.codeResult.code;
-                                scannerDebug.style.display = 'block';
-                                scannerDebug.textContent = `Código de barras detectado: ${code}`;
-                                processarCodigoLido(code);
-                            }
-                        });
-                    }
-
-                    // Iniciar escaneamento periódico para QR codes
-                    if (scanInterval) {
-                        clearInterval(scanInterval);
-                    }
-
-                    scanInterval = setInterval(() => {
-                        if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                            canvas.width = video.videoWidth;
-                            canvas.height = video.videoHeight;
-                            canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                            const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+                // Iniciar escaneamento periódico para QR codes (jsQR)
+                if (scanInterval) clearInterval(scanInterval);
+                scanInterval = setInterval(() => {
+                    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                        canvas.height = video.videoHeight;
+                        canvas.width = video.videoWidth;
+                        canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
+                        const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+                        
+                        try {
                             const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
                                 inversionAttempts: "dontInvert",
                             });
-
-                            if (qrCode) {
-                                scannerDebug.style.display = 'block';
-                                scannerDebug.textContent = `QR Code detectado: ${qrCode.data}`;
-                                processarCodigoLido(qrCode.data);
+                            if (qrCode && qrCode.data) {
+                                handleDetection({ codeResult: { code: qrCode.data }, type: 'QR' });
                             }
+                        } catch (qrError) {
+                            // console.error("Erro no jsQR:", qrError); // Pode ser muito verboso
                         }
-                    }, 200);
+                    }
+                }, 300); // Intervalo um pouco maior para QR
 
-                    // Esconder a mensagem de status após 3 segundos
-                    setTimeout(() => {
-                        statusCamera.style.display = 'none';
-                    }, 3000);
-
-                } catch (error) {
-                    console.error("Erro ao acessar câmera:", error);
-                    statusCamera.textContent = 'Erro ao acessar a câmera: ' + error.message;
-                    statusCamera.style.color = 'red';
-
-                    const cameraView = document.getElementById('camera-view');
-                    cameraView.innerHTML = `
-                        <div style="text-align: center; padding: 20px;">
-                            <p style="color: #d9534f;">Não foi possível acessar a câmera.</p>
-                            <p>Digite o código manualmente ou tente novamente.</p>
-                        </div>`;
-                }
+                setTimeout(() => { statusCamera.style.display = 'none'; }, 3000);
 
             } catch (error) {
-                console.error("Erro ao iniciar leitor:", error);
-                const statusCamera = document.getElementById('status-camera');
-                statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Erro ao iniciar leitor: ' + error.message;
+                console.error("Erro ao iniciar câmera ou scanner:", error);
+                statusCamera.textContent = 'Erro na câmera/scanner: ' + error.message;
                 statusCamera.style.color = 'red';
+                const cameraView = document.getElementById('camera-view');
+                cameraView.innerHTML = `<div style="text-align: center; padding: 20px;"><p style="color: #d9534f;">Falha ao acessar a câmera.</p><p>Verifique as permissões e tente novamente, ou digite o código manualmente.</p></div>`;
+                fecharLeitor(); // Garante que tudo seja limpo em caso de erro
             }
         }
 
-        // Processar código lido pelo scanner
-        function processarCodigoLido(codigo) {
-            // Parar scanners
+        // MODIFICADO: Função para lidar com detecções (Quagga ou jsQR)
+        function handleDetection(result) {
+            if (isProcessingCode) return; // Ignora se já está processando um código
+
+            let code = null;
+            let type = 'Barcode'; // Default para Quagga
+
+            if (result && result.codeResult && result.codeResult.code) {
+                code = result.codeResult.code.trim();
+                type = result.type || type; // Usa o tipo passado (QR) ou default
+            } else {
+                return; // Ignora detecções sem código
+            }
+
+            const scannerDebug = document.getElementById('scanner-debug');
+            scannerDebug.style.display = 'block';
+            scannerDebug.textContent = `${type} detectado: ${code}`;
+            
+            // Validação do formato
+            if (CODIGO_FORMATO_ESPERADO.test(code)) {
+                isProcessingCode = true; // Marca como processando
+                console.log("Código validado:", code);
+                
+                // Parar scanners imediatamente após detecção válida
+                pararScanners(); 
+                
+                // Fechar visualização do scanner e processar
+                fecharLeitorVisualizacao(); 
+                
+                // Preencher o campo e consultar
+                document.getElementById("input-codigo").value = code;
+                consultar();
+
+                // Feedback sonoro (opcional)
+                // try { new Audio('path/to/beep.mp3').play(); } catch(e) {}
+
+            } else {
+                console.warn("Código detectado inválido ou formato incorreto:", code);
+                scannerDebug.textContent += ` - Formato inválido! Esperado: ${CODIGO_FORMATO_ESPERADO}. Tente novamente.`;
+                // Não faz nada, permite que o scanner continue tentando
+            }
+        }
+
+        // MODIFICADO: Função separada para parar os scanners
+        function pararScanners() {
             if (scanInterval) {
                 clearInterval(scanInterval);
                 scanInterval = null;
+                console.log("jsQR parado.");
             }
             if (quaggaInitialized) {
+                Quagga.offDetected(handleDetection); // Remove listener para evitar detecções extras
                 Quagga.stop();
-                quaggaInitialized = false;
+                quaggaInitialized = false; // Marca como não inicializado para a próxima vez
+                console.log("QuaggaJS parado.");
             }
-            
-            // Fechar o leitor
-            fecharLeitor();
-            
-            // Preencher o campo e consultar
-            const codigoLimpo = codigo.trim();
-            document.getElementById("input-codigo").value = codigoLimpo;
-            consultar();
         }
 
-        // Fechar o leitor
-        function fecharLeitor() {
-            const scannerContainer = document.getElementById('scanner-container');
+        // MODIFICADO: Função separada para fechar a visualização e limpar stream
+        function fecharLeitorVisualizacao() {
+             const scannerContainer = document.getElementById('scanner-container');
             scannerContainer.style.display = 'none';
+            document.getElementById('status-camera').style.display = 'none';
+            // Não esconde o debug aqui, pois pode ter info útil
 
-            // Parar o escaneamento de QR
-            if (scanInterval) {
-                clearInterval(scanInterval);
-                scanInterval = null;
-            }
-
-            // Parar QuaggaJS
-            if (quaggaInitialized) {
-                Quagga.stop();
-                quaggaInitialized = false;
-            }
-
-            // Parar o stream de vídeo
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
                 videoStream = null;
+                console.log("Stream de vídeo parado.");
             }
-
-            // Esconder debug
-            document.getElementById('scanner-debug').style.display = 'none';
+            // Limpa o vídeo para evitar que fique congelado na tela
+            const video = document.querySelector('#camera-view video');
+            if (video) video.srcObject = null;
         }
 
-        // Consultar código
+        // Função chamada pelo botão Fechar Leitor
+        function fecharLeitor() {
+            pararScanners();
+            fecharLeitorVisualizacao();
+            isProcessingCode = false; // Reseta a flag
+            document.getElementById('scanner-debug').style.display = 'none'; // Esconde debug ao fechar manualmente
+        }
+
+        // Consultar código (Função original, ajustada para limpar loading/erro)
         function consultar() {
             const codigo = document.getElementById("input-codigo").value.trim();
             if (!codigo) {
-                mostrarErro('Por favor, digite um código ou escaneie um QR Code/código de barras');
+                mostrarErro('Por favor, digite um código ou escaneie.');
                 return;
             }
 
             mostrarLoading('Buscando informações...');
             
-            // Buscar nos dados carregados
+            // Simula busca nos dados carregados
             setTimeout(() => {
                 if (dadosImobilizados[codigo]) {
                     const imobilizado = dadosImobilizados[codigo];
                     mostrarResultado(codigo, imobilizado);
-                    
-                    // Adicionar ao inventário apenas se o inventário estiver ativo
                     if (inventarioAtivo) {
                         adicionarAoInventario(codigo, imobilizado);
                     }
                 } else {
-                    mostrarErro(`Imobilizado ${codigo} não encontrado`);
+                    mostrarErro(`Imobilizado ${codigo} não encontrado.`);
                 }
-            }, 300);
-        }
-
-        // Mostrar indicador de carregamento
-        function mostrarLoading(mensagem) {
-            document.getElementById('detalhes').innerHTML = `
-                <div class="loading">
-                    <div class="spinner"></div>
-                    <p>${mensagem}</p>
-                </div>`;
-            document.getElementById('resultado').style.display = 'block';
-        }
-
-        // Mostrar mensagem de erro
-        function mostrarErro(mensagem) {
-            document.getElementById('detalhes').innerHTML = `<p class="not-found">${mensagem}</p>`;
-            document.getElementById('resultado').style.display = 'block';
-        }
-
-        // Mostrar resultado da consulta
-        function mostrarResultado(codigo, imobilizado) {
-            let html = '';
-            
-            if (imobilizado.itens && imobilizado.itens.length > 0) {
-                html += `
-                    <div class="codigo-header">
-                        <h3>Código: ${codigo}</h3>
-                        <p>Total de itens: ${imobilizado.itens.length}</p>
-                    </div>`;
-                
-                html += '<div class="itens-lista">';
-                
-                imobilizado.itens.forEach((item, index) => {
-                    const numero = item.Número || (index + 1);
-                    
-                    html += `
-                        <div class="item-lista">
-                            <div class="item-lista-header">
-                                <h3>Item ${numero}</h3>
-                                <span class="item-numero">${index + 1} de ${imobilizado.itens.length}</span>
-                            </div>
-                            <div class="item-lista-content">
-                                <table>
-                                    <tr><th>Descrição</th><td>${item.Descrição || 'N/A'}</td></tr>
-                                    <tr><th>Data</th><td>${item.Data || 'N/A'}</td></tr>`;
-                    
-                    if (item.Inventário) html += `<tr><th>Inventário</th><td>${item.Inventário}</td></tr>`;
-                    if (item.Série) html += `<tr><th>Série</th><td>${item.Série}</td></tr>`;
-                    if (item['Centro Custo']) html += `<tr><th>Centro de Custo</th><td>${item['Centro Custo']}</td></tr>`;
-                    if (item['Subnº']) html += `<tr><th>Subnúmero</th><td>${item['Subnº']}</td></tr>`;
-                    
-                    html += `</table></div></div>`;
-                });
-                
-                html += '</div>';
-            }
-
-            document.getElementById('detalhes').innerHTML = html;
-            document.getElementById('resultado').style.display = 'block';
-        }
-
-        // Iniciar inventário
-        function iniciarInventario() {
-            inventarioAtivo = true;
-            document.getElementById('inventario-container').style.display = 'block';
-            document.getElementById('iniciar-inventario-btn').style.display = 'none';
-            renderizarInventario();
-        }
-
-        // Fechar inventário
-        function fecharInventario() {
-            inventarioAtivo = false;
-            document.getElementById('inventario-container').style.display = 'none';
-            document.getElementById('iniciar-inventario-btn').style.display = 'block';
+            }, 300); // Pequeno delay para simular busca
         }
 
         // Adicionar item ao inventário
         function adicionarAoInventario(codigo, imobilizado) {
-            if (!inventario.find(i => i.codigo === codigo)) {
-                inventario.push({ 
-                    codigo, 
-                    itens: imobilizado.itens 
-                });
+            // Evitar duplicados
+            if (!inventario.some(item => item.codigo === codigo)) {
+                inventario.push({ codigo: codigo, itens: imobilizado.itens });
                 salvarInventario();
                 renderizarInventario();
             }
         }
 
-        // Inicializar a aplicação quando o documento estiver carregado
+        // Iniciar/Mostrar modo inventário
+        function iniciarInventario() {
+            inventarioAtivo = true;
+            document.getElementById('inventario-container').style.display = 'block';
+            document.getElementById('iniciar-inventario-btn').style.display = 'none'; // Esconde botão Iniciar
+            renderizarInventario();
+        }
+
+        // Fechar modo inventário
+        function fecharInventario() {
+            inventarioAtivo = false;
+            document.getElementById('inventario-container').style.display = 'none';
+            document.getElementById('iniciar-inventario-btn').style.display = 'inline-block'; // Mostra botão Iniciar novamente
+        }
+
+        // Mostrar indicador de carregamento
+        function mostrarLoading(mensagem) {
+            const detalhesDiv = document.getElementById('detalhes');
+            detalhesDiv.innerHTML = `<div class="loading"><div class="spinner"></div><p>${mensagem}</p></div>`;
+            document.getElementById('resultado').style.display = 'block';
+        }
+
+        // Mostrar mensagem de erro
+        function mostrarErro(mensagem) {
+            const detalhesDiv = document.getElementById('detalhes');
+            detalhesDiv.innerHTML = `<p class="not-found">${mensagem}</p>`;
+            document.getElementById('resultado').style.display = 'block';
+        }
+
+        // Mostrar resultado da consulta
+        function mostrarResultado(codigo, imobilizado) {
+            const detalhesDiv = document.getElementById('detalhes');
+            let html = '';
+            if (imobilizado.itens && imobilizado.itens.length > 0) {
+                html += `<div class="item-lista-header"><h3>Código: ${codigo}</h3> <span class="item-numero">${imobilizado.itens.length} item(ns)</span></div>`;
+                imobilizado.itens.forEach((item, index) => {
+                    html += `<div class="item-lista">
+                                <h4>Item ${index + 1}</h4>
+                                <table>
+                                    ${Object.entries(item).map(([key, value]) => `<tr><th>${key}</th><td>${value || 'N/A'}</td></tr>`).join('')}
+                                </table>
+                             </div>`;
+                });
+            } else {
+                html = `<p>Código ${codigo} encontrado, mas sem detalhes associados.</p>`;
+            }
+            detalhesDiv.innerHTML = html;
+            document.getElementById('resultado').style.display = 'block';
+        }
+
+        // Inicializar a aplicação quando o DOM estiver pronto
         document.addEventListener('DOMContentLoaded', inicializar);
+
     </script>
 </body>
 </html>
