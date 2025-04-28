@@ -250,7 +250,7 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
             display: none;
         }
-        #inventario-list {
+        #invent emphysema {
             max-height: 200px;
             overflow-y: auto;
             border: 1px solid #ddd;
@@ -359,18 +359,19 @@
                     <div id="camera-frame"></div>
                 </div>
             </div>
-            <div id="camera-instructions">Posicione o QR code no centro da tela</div>
+            <div id="camera-instructions">Posicione o QR code ou código de barras no centro da tela</div>
             <canvas id="canvas"></canvas>
         </div>
-        <button id="close-qr-reader" class="btn btn-danger">Fechar Leitor QR</button>
+        <button id="close-qr-reader" class="btn btn-danger">Fechar Leitor</button>
     </div>
     
     <footer>
         Sistema de Consulta de Imobilizados | Desenvolvido para Videplast
     </footer>
 
-    <!-- Adicionar a biblioteca jsQR -->
+    <!-- Adicionar bibliotecas jsQR e QuaggaJS -->
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 
     <script>
         // Variáveis globais
@@ -614,22 +615,22 @@
             document.body.removeChild(link);
         }
         
-        // Iniciar leitor QR
+        // Iniciar leitor QR e Barcode
         async function iniciarLeitorQR() {
             try {
                 const qrReaderContainer = document.getElementById('qr-reader-container');
                 qrReaderContainer.style.display = 'flex';
-                
+
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
                 statusCamera.textContent = 'Iniciando câmera...';
                 statusCamera.style.color = 'black';
-                
+
                 try {
                     const cameraView = document.getElementById('camera-view');
                     const video = document.createElement('video');
                     video.setAttribute('playsinline', true);
-                    
+
                     // Limpar o elemento camera-view
                     while (cameraView.firstChild) {
                         if (!cameraView.firstChild.id || cameraView.firstChild.id !== 'camera-overlay') {
@@ -638,111 +639,158 @@
                             break;
                         }
                     }
-                    
+
                     cameraView.insertBefore(video, cameraView.firstChild);
-                    
+
                     // Solicitar acesso à câmera
                     videoStream = await navigator.mediaDevices.getUserMedia({
                         video: { facingMode: 'environment' }
                     });
-                    
+
                     video.srcObject = videoStream;
                     await video.play();
-                    
-                    statusCamera.textContent = 'Câmera ativada. Posicione o QR code no centro da tela.';
-                    
-                    // Configurar canvas para processamento do QR code
+
+                    statusCamera.textContent = 'Câmera ativada. Posicione o QR code ou código de barras no centro da tela.';
+
+                    // Configurar canvas para processamento
                     const canvas = document.getElementById('canvas');
                     const canvasContext = canvas.getContext('2d');
                     const qrDebug = document.getElementById('qr-debug');
-                    
-                    // Iniciar escaneamento periódico
+
+                    // Iniciar QuaggaJS para leitura de códigos de barras
+                    iniciarLeitorBarcode(video, (barcode) => {
+                        qrDebug.style.display = 'block';
+                        qrDebug.textContent = `Código de barras detectado: ${barcode}`;
+                        clearInterval(scanInterval);
+                        fecharLeitorQR();
+                        document.getElementById("input-codigo").value = barcode;
+                        consultar();
+                    });
+
+                    // Iniciar escaneamento periódico para QR codes
                     if (scanInterval) {
                         clearInterval(scanInterval);
                     }
-                    
+
                     scanInterval = setInterval(() => {
                         if (video.readyState === video.HAVE_ENOUGH_DATA) {
                             // Definir dimensões do canvas para corresponder ao vídeo
                             canvas.width = video.videoWidth;
                             canvas.height = video.videoHeight;
-                            
+
                             // Desenhar o quadro atual do vídeo no canvas
                             canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
-                            
-                            // Obter dados da imagem do canvas
+
+                            // Obter dados da imagem do canvas para jsQR
                             const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
-                            
+
                             // Tentar decodificar o QR code
-                            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
                                 inversionAttempts: "dontInvert",
                             });
-                            
+
                             // Se um QR code for encontrado
-                            if (code) {
+                            if (qrCode) {
                                 qrDebug.style.display = 'block';
-                                qrDebug.textContent = `QR Code detectado: ${code.data}`;
-                                
-                                // Parar o escaneamento
+                                qrDebug.textContent = `QR Code detectado: ${qrCode.data}`;
+                                Quagga.stop(); // Parar QuaggaJS
                                 clearInterval(scanInterval);
-                                
-                                // Processar o código lido
-                                const codigoLimpo = code.data.trim();
-                                document.getElementById("input-codigo").value = codigoLimpo;
-                                
-                                // Fechar o leitor QR e consultar o código
                                 fecharLeitorQR();
+                                document.getElementById("input-codigo").value = qrCode.data.trim();
                                 consultar();
                             }
                         }
                     }, 100); // Verificar a cada 100ms
-                    
+
                     // Esconder a mensagem de status após 3 segundos
                     setTimeout(() => {
                         statusCamera.style.display = 'none';
                     }, 3000);
-                    
+
                 } catch (error) {
                     console.error("Erro ao acessar câmera:", error);
                     statusCamera.textContent = 'Erro ao acessar a câmera: ' + error.message;
                     statusCamera.style.color = 'red';
-                    
-                    // Se não conseguir acessar a câmera, mostrar uma interface alternativa
+
                     const cameraView = document.getElementById('camera-view');
                     cameraView.innerHTML = `
                         <div style="text-align: center; padding: 20px;">
                             <p style="color: #d9534f;">Não foi possível acessar a câmera.</p>
                             <p>Digite o código manualmente ou tente novamente.</p>
-                        </div>
-                    `;
+                        </div>`;
                 }
-                
+
             } catch (error) {
-                console.error("Erro ao iniciar leitor QR:", error);
+                console.error("Erro ao iniciar leitor:", error);
                 const statusCamera = document.getElementById('status-camera');
                 statusCamera.style.display = 'block';
-                statusCamera.textContent = 'Erro ao iniciar leitor QR: ' + error.message;
+                statusCamera.textContent = 'Erro ao iniciar leitor: ' + error.message;
                 statusCamera.style.color = 'red';
             }
         }
 
-        // Fechar o leitor QR
+        // Função para iniciar o leitor de códigos de barras com QuaggaJS
+        function iniciarLeitorBarcode(videoElement, callback) {
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: videoElement,
+                    constraints: {
+                        facingMode: "environment"
+                    }
+                },
+                decoder: {
+                    readers: [
+                        "ean_reader",      // EAN-13, EAN-8
+                        "upc_reader",      // UPC-A, UPC-E
+                        "code_128_reader", // Code 128
+                        "code_39_reader"   // Code 39
+                        // Adicione outros formatos conforme necessário
+                    ]
+                },
+                locate: true
+            }, (err) => {
+                if (err) {
+                    console.error("Erro ao inicializar QuaggaJS:", err);
+                    document.getElementById('qr-debug').style.display = 'block';
+                    document.getElementById('qr-debug').textContent = `Erro QuaggaJS: ${err.message}`;
+                    return;
+                }
+                Quagga.start();
+            });
+
+            // Evento para processar códigos de barras detectados
+            Quagga.onDetected((result) => {
+                const code = result.codeResult.code;
+                if (code) {
+                    callback(code);
+                }
+            });
+        }
+
+        // Fechar o leitor QR e Barcode
         function fecharLeitorQR() {
             const qrReaderContainer = document.getElementById('qr-reader-container');
             qrReaderContainer.style.display = 'none';
-            
-            // Parar o escaneamento
+
+            // Parar o escaneamento de QR
             if (scanInterval) {
                 clearInterval(scanInterval);
                 scanInterval = null;
             }
-            
-            // Parar o stream de vídeo se estiver ativo
+
+            // Parar QuaggaJS
+            if (typeof Quagga !== 'undefined') {
+                Quagga.stop();
+            }
+
+            // Parar o stream de vídeo
             if (videoStream) {
                 videoStream.getTracks().forEach(track => track.stop());
                 videoStream = null;
             }
-            
+
             // Esconder debug
             document.getElementById('qr-debug').style.display = 'none';
         }
@@ -751,7 +799,7 @@
         function consultar() {
             const codigo = document.getElementById("input-codigo").value.trim();
             if (!codigo) {
-                mostrarErro('Por favor, digite um código ou escaneie um QR Code');
+                mostrarErro('Por favor, digite um código ou escaneie um QR Code ou código de barras');
                 return;
             }
 
