@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Consulta de Imobilizados - Videplast (Modificado)</title>
+    <title>Consulta de Imobilizados - Videplast (Otimizado)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        /* Estilos CSS permanecem os mesmos do arquivo original */
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
             max-width: 900px;
@@ -124,11 +123,11 @@
             pointer-events: none;
         }
         #camera-frame {
-            width: 80%;
-            height: 200px;
-            border: 2px solid #0056b3;
+            width: 60%; /* MODIFICADO: Reduzido para focar melhor em códigos pequenos */
+            height: 120px; /* MODIFICADO: Reduzido para focar melhor em códigos pequenos */
+            border: 2px solid #ff0000; /* MODIFICADO: Vermelho para melhor visibilidade */
             border-radius: 8px;
-            box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 0 5000px rgba(0, 0, 0, 0.5);
         }
         #scanner-instructions {
             margin-top: 10px;
@@ -321,6 +320,51 @@
             0% { top: 0; }
             100% { top: 100%; }
         }
+        /* NOVO: Controles de zoom para códigos pequenos */
+        #zoom-controls {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+            gap: 10px;
+        }
+        #zoom-controls button {
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        #zoom-level {
+            display: inline-block;
+            width: 60px;
+            text-align: center;
+            font-weight: bold;
+            line-height: 40px;
+        }
+        /* NOVO: Indicador de qualidade de leitura */
+        #scan-quality {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.6);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            z-index: 10;
+        }
+        /* NOVO: Estilo para o modo de leitura */
+        #scan-mode-toggle {
+            margin-top: 10px;
+            text-align: center;
+        }
+        #scan-mode-toggle label {
+            margin-left: 5px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -373,8 +417,24 @@
                 <div id="camera-overlay">
                     <div id="camera-frame"></div>
                 </div>
+                <!-- NOVO: Indicador de qualidade de leitura -->
+                <div id="scan-quality">Qualidade: Aguardando...</div>
             </div>
-            <div id="scanner-instructions">Posicione o QR code ou código de barras na área destacada</div>
+            <div id="scanner-instructions">Posicione o código de barras na área destacada</div>
+            
+            <!-- NOVO: Controles de zoom para códigos pequenos -->
+            <div id="zoom-controls">
+                <button id="zoom-out">-</button>
+                <span id="zoom-level">1.0x</span>
+                <button id="zoom-in">+</button>
+            </div>
+            
+            <!-- NOVO: Modo de leitura -->
+            <div id="scan-mode-toggle">
+                <input type="checkbox" id="precise-mode" checked>
+                <label for="precise-mode">Modo de precisão para códigos pequenos</label>
+            </div>
+            
             <canvas id="canvas"></canvas>
         </div>
         <button id="close-scanner" class="btn btn-danger">Fechar Leitor</button>
@@ -397,9 +457,12 @@
         let scanInterval = null;
         let quaggaInitialized = false;
         let isProcessingCode = false; // Flag para evitar processamento múltiplo
-        const CODIGO_FORMATO_ESPERADO = /^[0-9]{6}$/; // MODIFICADO: Define o formato esperado (6 dígitos)
-        // Ajuste a expressão regular acima (^[0-9]{6}$) se o formato for diferente (ex: /^[0-9]+$/ para apenas números)
-
+        let currentZoom = 1.0; // NOVO: Controle de zoom
+        let detectionBuffer = []; // NOVO: Buffer para armazenar leituras recentes
+        let lastDetectionTime = 0; // NOVO: Controle de tempo entre detecções
+        const DETECTION_THRESHOLD = 3; // NOVO: Número de detecções iguais necessárias para confirmar
+        const CODIGO_FORMATO_ESPERADO = /^[0-9]{6}$/; // Formato esperado (6 dígitos)
+        
         // Inicializar a aplicação
         async function inicializar() {
             document.getElementById('resultado').style.display = 'none';
@@ -419,12 +482,43 @@
             document.getElementById('limpar-btn').addEventListener('click', limparInventario);
             document.getElementById('exportar-btn').addEventListener('click', exportarInventario);
             
+            // NOVO: Event listeners para controles de zoom
+            document.getElementById('zoom-in').addEventListener('click', function() {
+                adjustZoom(0.2); // Aumenta o zoom em 0.2
+            });
+            document.getElementById('zoom-out').addEventListener('click', function() {
+                adjustZoom(-0.2); // Diminui o zoom em 0.2
+            });
+            
             // Permitir consulta ao pressionar Enter no campo de entrada
             document.getElementById('input-codigo').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') {
                     consultar();
                 }
             });
+        }
+        
+        // NOVO: Função para ajustar o zoom da câmera
+        function adjustZoom(delta) {
+            currentZoom = Math.max(1.0, Math.min(3.0, currentZoom + delta));
+            document.getElementById('zoom-level').textContent = currentZoom.toFixed(1) + 'x';
+            
+            const video = document.querySelector('#camera-view video');
+            if (video) {
+                // Aplicar zoom via CSS transform
+                video.style.transform = `scale(${currentZoom})`;
+                
+                // Atualizar a área de escaneamento do Quagga se estiver ativo
+                if (quaggaInitialized) {
+                    try {
+                        Quagga.stop();
+                        quaggaInitialized = false;
+                        initQuagga(video); // Reiniciar com novas configurações
+                    } catch (e) {
+                        console.error("Erro ao ajustar zoom:", e);
+                    }
+                }
+            }
         }
         
         // Carregar dados do arquivo JSON
@@ -610,6 +704,11 @@
             statusCamera.textContent = 'Iniciando câmera...';
             statusCamera.style.color = 'black';
             isProcessingCode = false; // Reseta a flag
+            detectionBuffer = []; // Limpa o buffer de detecções
+            
+            // Resetar zoom
+            currentZoom = 1.0;
+            document.getElementById('zoom-level').textContent = '1.0x';
 
             try {
                 const cameraView = document.getElementById('camera-view');
@@ -620,105 +719,38 @@
                     cameraView.insertBefore(video, cameraView.firstChild);
                 }
 
-                // Solicitar acesso à câmera com resolução otimizada
-                videoStream = await navigator.mediaDevices.getUserMedia({
+                // MODIFICADO: Configurações otimizadas para câmera
+                const constraints = {
                     video: { 
                         facingMode: 'environment',
-                        width: { ideal: 640 }, // MODIFICADO: Resolução menor
-                        height: { ideal: 480 } // MODIFICADO: Resolução menor
+                        width: { ideal: 1280 }, // Alta resolução para códigos pequenos
+                        height: { ideal: 720 },
+                        // NOVO: Tentar habilitar foco automático e exposição automática
+                        advanced: [
+                            { focusMode: "continuous" },
+                            { exposureMode: "continuous" },
+                            { whiteBalanceMode: "continuous" }
+                        ]
                     }
-                });
+                };
+
+                // Solicitar acesso à câmera com configurações otimizadas
+                videoStream = await navigator.mediaDevices.getUserMedia(constraints);
 
                 video.srcObject = videoStream;
                 await video.play();
-                statusCamera.textContent = 'Câmera ativada. Posicione o código.';
+                
+                // NOVO: Aplicar zoom inicial
+                video.style.transform = `scale(${currentZoom})`;
+                
+                statusCamera.textContent = 'Câmera ativada. Posicione o código na área destacada.';
+                document.getElementById('scan-quality').textContent = 'Qualidade: Aguardando...';
 
                 const canvas = document.getElementById('canvas');
                 const canvasContext = canvas.getContext('2d');
 
                 // Iniciar QuaggaJS com configuração otimizada
-                if (!quaggaInitialized) {
-                    Quagga.init({
-                        inputStream: {
-                            name: "Live",
-                            type: "LiveStream",
-                            target: video,
-                            constraints: {
-                                facingMode: "environment",
-                                width: { ideal: 640 }, // MODIFICADO
-                                height: { ideal: 480 } // MODIFICADO
-                            },
-                            area: { // Opcional: Restringir área de detecção (ajuste conforme necessário)
-                                top: "20%",
-                                right: "10%",
-                                left: "10%",
-                                bottom: "20%"
-                            }
-                        },
-                        decoder: {
-                             readers: [
-                                "code_128_reader", 
-                                "ean_reader",
-                                "i2of5_reader" // MODIFICADO: Leitores mais comuns para numéricos
-                                // Adicione outros leitores se necessário, mas menos é melhor para performance
-                            ],
-                            debug: {
-                                drawBoundingBox: true,
-                                showFrequency: false, // Desabilitado para performance
-                                drawScanline: true,
-                                showPattern: false // Desabilitado para performance
-                            }
-                        },
-                        locate: true, // Habilitar localização
-                        locator: { // MODIFICADO: Ajustes no localizador
-                             patchSize: "medium", // 'x-small', 'small', 'medium', 'large', 'x-large'
-                             halfSample: true
-                        },
-                        frequency: 10, // Tentar decodificar 10 vezes por segundo
-                        numOfWorkers: navigator.hardwareConcurrency || 4, // Usar múltiplos núcleos se disponíveis
-                    }, function(err) {
-                        if (err) {
-                            console.error("Erro ao inicializar Quagga:", err);
-                            scannerDebug.style.display = 'block';
-                            scannerDebug.textContent = `Erro QuaggaJS: ${err.message}`;
-                            fecharLeitor(); // Fecha se não conseguir inicializar
-                            return;
-                        }
-                        quaggaInitialized = true;
-                        Quagga.start();
-                        console.log("QuaggaJS iniciado.");
-                    });
-
-                    Quagga.onDetected(handleDetection);
-                    Quagga.onProcessed(function(result) {
-                        // Opcional: Desenhar caixa delimitadora e linha
-                        var drawingCtx = Quagga.canvas.ctx.overlay,
-                            drawingCanvas = Quagga.canvas.dom.overlay;
-
-                        if (result) {
-                            if (result.boxes) {
-                                drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
-                                result.boxes.filter(function (box) {
-                                    return box !== result.box;
-                                }).forEach(function (box) {
-                                    Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
-                                });
-                            }
-
-                            if (result.box) {
-                                Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
-                            }
-
-                            if (result.codeResult && result.codeResult.code) {
-                                // Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
-                            }
-                        }
-                    });
-
-                } else {
-                    // Se já inicializado, apenas reinicia
-                    Quagga.start();
-                }
+                initQuagga(video);
 
                 // Iniciar escaneamento periódico para QR codes (jsQR)
                 if (scanInterval) clearInterval(scanInterval);
@@ -727,20 +759,29 @@
                         canvas.height = video.videoHeight;
                         canvas.width = video.videoWidth;
                         canvasContext.drawImage(video, 0, 0, canvas.width, canvas.height);
-                        const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
                         
+                        // NOVO: Aplicar processamento de imagem para melhorar contraste
                         try {
+                            const imageData = canvasContext.getImageData(0, 0, canvas.width, canvas.height);
+                            
+                            // Aplicar processamento apenas se o modo de precisão estiver ativado
+                            if (document.getElementById('precise-mode').checked) {
+                                enhanceImageForBarcode(imageData);
+                                canvasContext.putImageData(imageData, 0, 0);
+                            }
+                            
                             const qrCode = jsQR(imageData.data, imageData.width, imageData.height, {
                                 inversionAttempts: "dontInvert",
                             });
+                            
                             if (qrCode && qrCode.data) {
                                 handleDetection({ codeResult: { code: qrCode.data }, type: 'QR' });
                             }
                         } catch (qrError) {
-                            // console.error("Erro no jsQR:", qrError); // Pode ser muito verboso
+                            console.error("Erro no processamento jsQR:", qrError);
                         }
                     }
-                }, 300); // Intervalo um pouco maior para QR
+                }, 200); // Intervalo mais rápido para melhor resposta
 
                 setTimeout(() => { statusCamera.style.display = 'none'; }, 3000);
 
@@ -753,47 +794,276 @@
                 fecharLeitor(); // Garante que tudo seja limpo em caso de erro
             }
         }
+        
+        // NOVO: Função para inicializar o Quagga com configurações otimizadas
+        function initQuagga(video) {
+            // Verificar se o modo de precisão está ativado
+            const preciseMode = document.getElementById('precise-mode').checked;
+            
+            // Configurações otimizadas para códigos pequenos
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: video,
+                    constraints: {
+                        facingMode: "environment",
+                        width: { ideal: 1280 }, // Alta resolução para códigos pequenos
+                        height: { ideal: 720 }
+                    },
+                    area: { // Área de escaneamento reduzida para focar no centro
+                        top: "30%",    // MODIFICADO: Área menor para focar melhor
+                        right: "30%",  // MODIFICADO: Área menor para focar melhor
+                        left: "30%",   // MODIFICADO: Área menor para focar melhor
+                        bottom: "30%"  // MODIFICADO: Área menor para focar melhor
+                    }
+                },
+                decoder: {
+                    readers: preciseMode ? 
+                        // Modo de precisão: apenas leitores específicos para códigos numéricos
+                        [
+                            {
+                                format: "code_128_reader",
+                                config: {
+                                    supplements: ["ean2", "ean5"]
+                                }
+                            },
+                            {
+                                format: "ean_reader",
+                                config: {
+                                    supplements: ["ean2", "ean5"]
+                                }
+                            },
+                            {
+                                format: "i2of5_reader",
+                                config: {
+                                    normalizeBarSpaceWidth: true
+                                }
+                            }
+                        ] : 
+                        // Modo normal: mais leitores para maior compatibilidade
+                        [
+                            "code_128_reader",
+                            "ean_reader",
+                            "ean_8_reader",
+                            "code_39_reader",
+                            "code_39_vin_reader",
+                            "codabar_reader",
+                            "upc_reader",
+                            "upc_e_reader",
+                            "i2of5_reader"
+                        ],
+                    multiple: false, // Desativar detecção múltipla para melhor performance
+                    debug: {
+                        drawBoundingBox: true,
+                        showFrequency: false,
+                        drawScanline: true,
+                        showPattern: false
+                    }
+                },
+                locate: true,
+                locator: {
+                    patchSize: preciseMode ? "small" : "medium", // Tamanho do patch menor para códigos pequenos
+                    halfSample: !preciseMode, // Desativar half sample no modo de precisão
+                    debug: {
+                        showCanvas: false,
+                        showPatches: false,
+                        showFoundPatches: false,
+                        showSkeleton: false,
+                        showLabels: false,
+                        showPatchLabels: false,
+                        showRemainingPatchLabels: false
+                    }
+                },
+                frequency: 10, // Tentar decodificar 10 vezes por segundo
+                numOfWorkers: navigator.hardwareConcurrency ? Math.max(2, Math.min(4, navigator.hardwareConcurrency)) : 2,
+                src: null
+            }, function(err) {
+                if (err) {
+                    console.error("Erro ao inicializar Quagga:", err);
+                    const scannerDebug = document.getElementById('scanner-debug');
+                    scannerDebug.style.display = 'block';
+                    scannerDebug.textContent = `Erro QuaggaJS: ${err.message}`;
+                    return;
+                }
+                quaggaInitialized = true;
+                Quagga.start();
+                console.log("QuaggaJS iniciado com modo de precisão:", preciseMode);
+            });
+
+            // Configurar callbacks
+            Quagga.onDetected(handleDetection);
+            
+            // NOVO: Monitorar qualidade da leitura
+            Quagga.onProcessed(function(result) {
+                updateScanQuality(result);
+                
+                // Desenhar caixa delimitadora e linha
+                var drawingCtx = Quagga.canvas.ctx.overlay,
+                    drawingCanvas = Quagga.canvas.dom.overlay;
+
+                if (result) {
+                    if (result.boxes) {
+                        drawingCtx.clearRect(0, 0, parseInt(drawingCanvas.getAttribute("width")), parseInt(drawingCanvas.getAttribute("height")));
+                        result.boxes.filter(function (box) {
+                            return box !== result.box;
+                        }).forEach(function (box) {
+                            Quagga.ImageDebug.drawPath(box, {x: 0, y: 1}, drawingCtx, {color: "green", lineWidth: 2});
+                        });
+                    }
+
+                    if (result.box) {
+                        Quagga.ImageDebug.drawPath(result.box, {x: 0, y: 1}, drawingCtx, {color: "#00F", lineWidth: 2});
+                    }
+
+                    if (result.codeResult && result.codeResult.code) {
+                        Quagga.ImageDebug.drawPath(result.line, {x: 'x', y: 'y'}, drawingCtx, {color: 'red', lineWidth: 3});
+                    }
+                }
+            });
+        }
+        
+        // NOVO: Função para melhorar a imagem para leitura de códigos de barras
+        function enhanceImageForBarcode(imageData) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+            
+            // Aplicar aumento de contraste e binarização adaptativa
+            for (let i = 0; i < data.length; i += 4) {
+                // Converter para escala de cinza
+                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                
+                // Aplicar aumento de contraste
+                const contrast = 1.5; // Fator de contraste
+                const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+                const newValue = factor * (gray - 128) + 128;
+                
+                // Binarização com limiar adaptativo
+                const threshold = 128;
+                const binaryValue = newValue > threshold ? 255 : 0;
+                
+                // Aplicar à imagem
+                data[i] = binaryValue;
+                data[i + 1] = binaryValue;
+                data[i + 2] = binaryValue;
+                // Não alterar o canal alpha (i + 3)
+            }
+            
+            return imageData;
+        }
+        
+        // NOVO: Função para atualizar o indicador de qualidade da leitura
+        function updateScanQuality(result) {
+            const qualityElement = document.getElementById('scan-quality');
+            
+            if (!result) {
+                qualityElement.textContent = 'Qualidade: Baixa';
+                qualityElement.style.backgroundColor = 'rgba(255,0,0,0.6)';
+                return;
+            }
+            
+            // Verificar se há resultados de decodificação
+            if (result.codeResult && result.codeResult.code) {
+                const confidence = result.codeResult.confidence;
+                
+                if (confidence > 90) {
+                    qualityElement.textContent = 'Qualidade: Excelente';
+                    qualityElement.style.backgroundColor = 'rgba(0,255,0,0.6)';
+                } else if (confidence > 70) {
+                    qualityElement.textContent = 'Qualidade: Boa';
+                    qualityElement.style.backgroundColor = 'rgba(144,238,144,0.6)';
+                } else if (confidence > 50) {
+                    qualityElement.textContent = 'Qualidade: Média';
+                    qualityElement.style.backgroundColor = 'rgba(255,255,0,0.6)';
+                } else {
+                    qualityElement.textContent = 'Qualidade: Baixa';
+                    qualityElement.style.backgroundColor = 'rgba(255,165,0,0.6)';
+                }
+            } else if (result.boxes && result.boxes.length > 0) {
+                qualityElement.textContent = 'Qualidade: Detectando...';
+                qualityElement.style.backgroundColor = 'rgba(0,0,255,0.6)';
+            } else {
+                qualityElement.textContent = 'Qualidade: Baixa';
+                qualityElement.style.backgroundColor = 'rgba(255,0,0,0.6)';
+            }
+        }
 
         // MODIFICADO: Função para lidar com detecções (Quagga ou jsQR)
         function handleDetection(result) {
             if (isProcessingCode) return; // Ignora se já está processando um código
-
-            let code = null;
-            let type = 'Barcode'; // Default para Quagga
-
-            if (result && result.codeResult && result.codeResult.code) {
-                code = result.codeResult.code.trim();
-                type = result.type || type; // Usa o tipo passado (QR) ou default
-            } else {
-                return; // Ignora detecções sem código
+            
+            // Verificar se temos um resultado válido
+            if (!result || !result.codeResult || !result.codeResult.code) {
+                return;
             }
-
+            
+            const code = result.codeResult.code.trim();
+            const type = result.type || 'Barcode';
+            const confidence = result.codeResult.confidence || 0;
+            
             const scannerDebug = document.getElementById('scanner-debug');
             scannerDebug.style.display = 'block';
-            scannerDebug.textContent = `${type} detectado: ${code}`;
+            scannerDebug.textContent = `${type} detectado: ${code} (Confiança: ${confidence.toFixed(1)}%)`;
             
-            // Validação do formato
-            if (CODIGO_FORMATO_ESPERADO.test(code)) {
-                isProcessingCode = true; // Marca como processando
-                console.log("Código validado:", code);
-                
-                // Parar scanners imediatamente após detecção válida
-                pararScanners(); 
-                
-                // Fechar visualização do scanner e processar
-                fecharLeitorVisualizacao(); 
-                
-                // Preencher o campo e consultar
-                document.getElementById("input-codigo").value = code;
-                consultar();
-
-                // Feedback sonoro (opcional)
-                // try { new Audio('path/to/beep.mp3').play(); } catch(e) {}
-
-            } else {
-                console.warn("Código detectado inválido ou formato incorreto:", code);
-                scannerDebug.textContent += ` - Formato inválido! Esperado: ${CODIGO_FORMATO_ESPERADO}. Tente novamente.`;
-                // Não faz nada, permite que o scanner continue tentando
+            // NOVO: Verificar o tempo desde a última detecção
+            const now = Date.now();
+            if (now - lastDetectionTime < 300) { // Ignorar detecções muito próximas (300ms)
+                return;
+            }
+            lastDetectionTime = now;
+            
+            // NOVO: Adicionar ao buffer de detecções
+            detectionBuffer.push(code);
+            if (detectionBuffer.length > 5) { // Manter apenas as 5 últimas leituras
+                detectionBuffer.shift();
+            }
+            
+            // NOVO: Verificar se o código aparece consistentemente no buffer
+            const counts = {};
+            let maxCount = 0;
+            let mostFrequentCode = null;
+            
+            detectionBuffer.forEach(c => {
+                counts[c] = (counts[c] || 0) + 1;
+                if (counts[c] > maxCount) {
+                    maxCount = counts[c];
+                    mostFrequentCode = c;
+                }
+            });
+            
+            // Verificar se o código mais frequente aparece pelo menos DETECTION_THRESHOLD vezes
+            if (maxCount >= DETECTION_THRESHOLD) {
+                // Validação do formato
+                if (CODIGO_FORMATO_ESPERADO.test(mostFrequentCode)) {
+                    isProcessingCode = true; // Marca como processando
+                    console.log("Código validado:", mostFrequentCode);
+                    
+                    // Parar scanners imediatamente após detecção válida
+                    pararScanners(); 
+                    
+                    // Fechar visualização do scanner e processar
+                    fecharLeitorVisualizacao(); 
+                    
+                    // Preencher o campo e consultar
+                    document.getElementById("input-codigo").value = mostFrequentCode;
+                    consultar();
+                    
+                    // Limpar o buffer
+                    detectionBuffer = [];
+                    
+                    // Feedback sonoro (opcional)
+                    try { 
+                        const beep = new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU...'); 
+                        beep.volume = 0.3;
+                        beep.play(); 
+                    } catch(e) {}
+                } else {
+                    console.warn("Código detectado inválido ou formato incorreto:", mostFrequentCode);
+                    scannerDebug.textContent += ` - Formato inválido! Esperado: ${CODIGO_FORMATO_ESPERADO}. Tente novamente.`;
+                    // Limpar o buffer para evitar falsos positivos persistentes
+                    detectionBuffer = [];
+                }
             }
         }
 
@@ -806,6 +1076,7 @@
             }
             if (quaggaInitialized) {
                 Quagga.offDetected(handleDetection); // Remove listener para evitar detecções extras
+                Quagga.offProcessed(updateScanQuality); // Remove listener de qualidade
                 Quagga.stop();
                 quaggaInitialized = false; // Marca como não inicializado para a próxima vez
                 console.log("QuaggaJS parado.");
@@ -834,6 +1105,7 @@
             pararScanners();
             fecharLeitorVisualizacao();
             isProcessingCode = false; // Reseta a flag
+            detectionBuffer = []; // Limpa o buffer
             document.getElementById('scanner-debug').style.display = 'none'; // Esconde debug ao fechar manualmente
         }
 
